@@ -216,21 +216,21 @@
       </div>
 
       <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
-        <label>أو ولّد الصور تلقائيًا بـ Gemini API — هتتحفظ عندك في فولدر <b>images/_generated</b> وتدخل المكتبة:</label>
+        <label>🎨 توليد أوتوماتيك بـ Gemini API — التطبيق بيولّد <b>كل</b> الصور الناقصة لوحده، صورة لكل صنف، ويظبّط حجمها ويحطها جاهزة للتحميل. بيشتغل محلي <b>وسحابي</b>.</label>
         <div class="row">
           <div>
             <label>مفتاح Gemini API <span class="muted">(بيتحفظ محليًا عندك بس)</span></label>
             <input type="password" id="gemKey" placeholder="الصق المفتاح من aistudio.google.com" />
           </div>
           <div>
-            <label>الموديل</label>
+            <label>موديل توليد الصور</label>
             <input type="text" id="gemModel" />
           </div>
         </div>
-        <div class="hint" style="margin-top:4px">لو الموديل ده مش شغّال عندك، جرّب: <code>gemini-2.0-flash-preview-image-generation</code></div>
-        <button id="genBtn" style="margin-top:10px">🪄 ولّد الصور الناقصة دلوقتي</button>
+        <div class="hint" style="margin-top:4px">لو الموديل ده مش شغّال عندك، جرّب: <code>gemini-2.0-flash-preview-image-generation</code>. الصور بتتقسّم مجموعات ٪١٠ في العرض، وكل صورة بتتظبط على حجم «الاستيراد» (خانة KB تحت). محليًا كمان بتتحفظ في المكتبة.</div>
+        <button id="genBtn" style="margin-top:10px">🎨 ولّد كل الصور الناقصة أوتوماتيك</button>
         <div id="genProgress" class="hint" style="margin-top:8px"></div>
-        <div id="genList" class="tbl-wrap" style="display:none;max-height:220px;margin-top:8px"></div>
+        <div id="genList" class="tbl-wrap" style="display:none;max-height:260px;margin-top:8px"></div>
       </div>
 
       <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
@@ -252,7 +252,11 @@
 
       <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
         <label>🤖 اقتراحات ذكية: التطبيق يدوّر في المكتبة عن صور ممكن تكون لنفس الأصناف الناقصة (تطابق تقريبي). مفيش حاجة بتتضاف غير لما تدوس «أضيفها».</label>
-        <button id="suggestBtn" style="margin-top:8px">🤖 اقترحلي صور للناقص</button>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 4px;font-size:12px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="aiEmb" style="width:auto"> 🧠 إعادة ترتيب بالـ AI (في المتصفح — مجاني، بيحمّل موديل أول مرة)</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="aiGem" style="width:auto"> ✨ ترشيح بـ Gemini للحالات الصعبة وعبر اللغات (بيستخدم مفتاح Gemini)</label>
+        </div>
+        <button id="suggestBtn" style="margin-top:4px">🤖 اقترحلي صور للناقص</button>
         <div id="suggestProgress" class="hint" style="margin-top:6px"></div>
         <div id="suggestList" style="margin-top:8px"></div>
       </div>
@@ -801,41 +805,75 @@ async function copyGem(){
 $('copyGem').addEventListener('click', async ()=>{ await copyGem(); const b=$('copyGem'); const t=b.textContent; b.textContent='✅ اتنسخ'; setTimeout(()=>b.textContent=t,1500); });
 $('openGem').addEventListener('click', async ()=>{ await copyGem(); window.open('https://gemini.google.com/app','_blank'); });
 
-// ----- direct generation via Gemini API (saved on disk by the backend) -----
+// ----- automatic image generation via Gemini API (direct from the browser: works local + cloud) -----
 const DEFAULT_MODEL='gemini-2.5-flash-image-preview';
+const GEN_FALLBACK='gemini-2.0-flash-preview-image-generation';
 $('gemKey').value   = localStorage.getItem('gemKey')   || '';
 $('gemModel').value = localStorage.getItem('gemModel') || DEFAULT_MODEL;
 $('gemKey').addEventListener('input',  ()=>localStorage.setItem('gemKey',   $('gemKey').value));
 $('gemModel').addEventListener('input',()=>localStorage.setItem('gemModel', $('gemModel').value));
+// Ask Gemini (image model) for ONE image for a single item. Returns a Blob or throws.
+// The image API returns one image per call, so we call once per item to get distinct images
+// (no collage). Same request shape the local backend already uses successfully.
+async function genImageBrowser(promptText, key, models){
+  const body=JSON.stringify({ contents:[{parts:[{text:promptText}]}], generationConfig:{responseModalities:['TEXT','IMAGE']} });
+  let lastErr;
+  for(const model of models){
+    if(!model) continue;
+    try{
+      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
+      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+      if(!res.ok){ lastErr=new Error('HTTP '+res.status+' '+(await res.text()).slice(0,160)); continue; }
+      const data=await res.json();
+      const parts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
+      for(const p of parts){
+        const inline=p.inlineData||p.inline_data;
+        if(inline && inline.data){
+          const mime=inline.mimeType||inline.mime_type||'image/png';
+          const bin=atob(inline.data); const bytes=new Uint8Array(bin.length);
+          for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+          return new Blob([bytes], {type:mime});
+        }
+      }
+      lastErr=new Error('مفيش صورة في رد الموديل (جرّب موديل تاني أو اتأكد من الحصة)');
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr||new Error('فشل التوليد');
+}
 $('genBtn').addEventListener('click', async ()=>{
-  if(CLOUD){ $('genProgress').innerHTML='التوليد التلقائي بالـ API شغّال في النسخة المحلية بس. هنا استخدم «نسخ + افتح Gemini» وبعدين ارفع الصور من «استورد صور Gemini».'; return; }
   const key=$('gemKey').value.trim();
   if(!key){ $('genProgress').innerHTML='⚠️ حُط مفتاح Gemini API الأول (مجاني من aistudio.google.com).'; return; }
   const model=$('gemModel').value.trim()||DEFAULT_MODEL;
-  const header=$('gemHeader').value;
-  const items=pendingMiss().map(r=>r.name);
-  if(!items.length){ $('genProgress').textContent='مفيش أصناف ناقصة.'; return; }
+  const models=[model]; if(model!==GEN_FALLBACK) models.push(GEN_FALLBACK);
+  const header=$('gemHeader').value||'';
+  const rows=pendingMiss().map(r=>({name:r.name, section:r.section||''}));
+  if(!rows.length){ $('genProgress').textContent='مفيش أصناف ناقصة محتاجة صور.'; return; }
   $('genBtn').disabled=true; startOp();
   const list=$('genList'); list.style.display='block';
   list.innerHTML='<table><tbody></tbody></table>'; const tb=list.querySelector('tbody');
+  const perGroup=10, groups=Math.ceil(rows.length/perGroup);
   let ok=0, fail=0;
-  for(let i=0;i<items.length;i++){
+  for(let i=0;i<rows.length;i++){
     if(state.cancel) break;
-    const it=items[i];
-    $('genProgress').textContent=`بولّد ${i+1}/${items.length}: ${it} ...`;
-    let res;
-    try{
-      res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key, model, prompt:header, item:it})}).then(r=>r.json());
-    }catch(e){ res={ok:false,error:String(e)}; }
+    const it=rows[i]; const g=Math.floor(i/perGroup)+1;
+    // per-item prompt: same header the manual flow uses + the item name (+ section if the sheet had one)
+    const prompt=header+'\n\n'+it.name+(it.section?' ('+it.section+')':'');
+    $('genProgress').textContent=`مجموعة ${g}/${groups} — بولّد ${i+1}/${rows.length}: ${it.name} ...`;
     const tr=document.createElement('tr');
-    if(res && res.ok){ ok++; tr.innerHTML=`<td>${escapeHtml(it)}</td><td><span class="pill ok">✔ اتولّدت</span></td><td class="muted">${escapeHtml(res.file||'')}</td>`; }
-    else { fail++; tr.innerHTML=`<td>${escapeHtml(it)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml((res&&res.error||'').slice(0,120))}</td>`; }
+    try{
+      const blob=await genImageBrowser(prompt, key, models);   // one distinct image
+      await importOne(it.name, blob);                          // resize to target KB + store (+persist if local)
+      ok++;
+      const imp=state.imported[it.name];
+      tr.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill ok">✔ اتولّدت (${Math.round(imp.blob.size/1024)}KB)</span></td><td class="impThumb"><img class="thumb" src="${URL.createObjectURL(imp.blob)}"></td>`;
+    }catch(err){ fail++; tr.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml(String(err.message||err).slice(0,140))}</td>`; }
     tb.appendChild(tr);
+    renderImport(); renderGemPrompt(); renderSuggestions();   // drop generated items from prompt/suggestions live
   }
-  $('genProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅ خلصت'}: <b>${ok}</b> اتولّدت، <b>${fail}</b> فشلت. الصور اتحفظت في فولدر <b>images/_generated</b>.`;
+  $('genProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅ خلصت'}: <b>${ok}</b> اتولّدت، <b>${fail}</b> فشلت. `
+    + (ok?`دوس «نزّل الكل (موجودة + مستوردة)» تجمعهم مع صور المطابقة.${CLOUD?' (في السحابة الصور للجلسة الحالية بس.)':' واتحفظت في المكتبة كمان.'}`:'');
+  if(ok && !CLOUD) loadLibrary();   // local: refresh so the new images join the library for next time
   $('genBtn').disabled=false; endOp();
-  loadLibrary(); // refresh so the new images join the library
 });
 
 // ----- import Gemini-downloaded images: resize ~220KB, rename to item, save to library + ZIP -----
@@ -1018,6 +1056,102 @@ function findSuggestions(name, limit=4, minCoverage=0){
   for(const s of scored){ if(seen.has(s.item.name)) continue; seen.add(s.item.name); s.item._cov=s.coverage; out.push(s.item); if(out.length>=limit) break; }
   return out;
 }
+// ===================== AI-assisted suggestions (in-browser embeddings + Gemini text) =====================
+const AI = { emb:{model:null, loading:null, cache:new Map()} };
+const AI_TEXT_MODELS = ['gemini-2.5-flash','gemini-2.0-flash'];   // text models for the smart picker (NOT the image model)
+$('aiEmb').checked = localStorage.getItem('aiEmb')==='1';
+$('aiGem').checked = localStorage.getItem('aiGem')==='1';
+$('aiEmb').addEventListener('change', ()=>localStorage.setItem('aiEmb', $('aiEmb').checked?'1':'0'));
+$('aiGem').addEventListener('change', ()=>localStorage.setItem('aiGem', $('aiGem').checked?'1':'0'));
+
+async function loadEmbModel(){
+  if(AI.emb.model) return AI.emb.model;
+  if(!AI.emb.loading){
+    AI.emb.loading=(async()=>{
+      const mod=await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+      mod.env.allowLocalModels=false;
+      AI.emb.model=await mod.pipeline('feature-extraction','Xenova/paraphrase-multilingual-MiniLM-L12-v2');
+      return AI.emb.model;
+    })();
+  }
+  return AI.emb.loading;
+}
+async function embed(text){
+  const key=normalizeName(text)||String(text||'').trim(); if(!key) return null;
+  if(AI.emb.cache.has(key)) return AI.emb.cache.get(key);
+  const m=await loadEmbModel();
+  const v=(await m(key,{pooling:'mean',normalize:true})).data;
+  AI.emb.cache.set(key,v); return v;
+}
+function cosSim(a,b){ if(!a||!b) return 0; let s=0; for(let i=0;i<a.length;i++) s+=a[i]*b[i]; return s; }
+// same-language library items sharing >=1 token with the name (wider net than findSuggestions' top-4).
+// Sorted by token-overlap first so the richest matches are always kept before the cap.
+function sameLangPool(name, cap=40){
+  const lang=langOf(name);
+  const toks=new Set(normalizeName(name).split(' ').filter(w=>w.length>=2));
+  if(!toks.size) return [];
+  const seen=new Set(), hits=[];
+  for(const item of (state.rawList||[])){
+    if(item._lang!==lang || !item._toks || !item._toks.length || seen.has(item.name)) continue;
+    let overlap=0; for(const w of item._toks) if(toks.has(w)) overlap++;
+    if(!overlap) continue;
+    seen.add(item.name); hits.push({item, overlap, len:item._toks.length});
+  }
+  // more shared words first; on a tie prefer the tighter name (fewer extra words)
+  hits.sort((a,b)=> b.overlap-a.overlap || a.len-b.len);
+  return hits.slice(0, cap).map(h=>h.item);
+}
+// lexical score of a candidate vs the query tokens (same idea as findSuggestions: reward covering
+// ALL the distinctive query words, penalize extra words). Dominant signal for same-language.
+function lexScore(qToks, qSet, it){
+  const ct=it._toks||[]; if(!ct.length) return -1;
+  let overlap=0; for(const w of ct) if(qSet.has(w)) overlap++;
+  if(!overlap) return -1;
+  const coverage = overlap/qToks.length;             // how many query words are present
+  const jaccard  = overlap/(new Set([...qToks,...ct]).size);
+  const extra    = Math.max(0, ct.length-overlap)*0.08;
+  const full     = coverage>=1 ? 0.5 : 0;
+  return coverage*2 + jaccard + full - extra;
+}
+// re-rank same-language candidates: lexical is primary, embedding cosine is a booster/tie-breaker.
+// (embeddings alone over-weight common words like "chicken" and demote the distinctive word.)
+async function embRerank(name, items, limit=4){
+  if(!items.length) return items.slice(0,limit);
+  const q=await embed(name);
+  const qToks=normalizeName(name).split(' ').filter(w=>w.length>=2); const qSet=new Set(qToks);
+  const scored=[];
+  for(const it of items){
+    const cos = q ? cosSim(q, await embed(stripExt(it.name))) : 0;
+    const lex = lexScore(qToks, qSet, it);
+    scored.push({it, cos, blend: lex + 0.4*cos});   // lex (~0..3) dominates; cos (0..1) breaks ties
+  }
+  scored.sort((a,b)=>b.blend-a.blend);
+  const seen=new Set(), out=[];
+  for(const x of scored){ if(seen.has(x.it.name)) continue; seen.add(x.it.name); x.it._ai=+x.cos.toFixed(2); out.push(x.it); if(out.length>=limit) break; }
+  return out;
+}
+// ask Gemini (text) to pick the single best candidate per item; one batched request. returns {name:libItem}
+async function geminiPick(batch, key){
+  let prompt='You match restaurant menu item names to product image file names. Domain: Egyptian food, Arabic & English mixed, with transliteration, word-order and spelling variations. For EACH item pick the ONE candidate that refers to the SAME dish/product regardless of language. If none is truly the same product, use -1. Reply with ONLY a JSON array like [{"i":0,"c":2},{"i":1,"c":-1}].\n\n';
+  batch.forEach((b,i)=>{ prompt+=i+') "'+b.name+'" | candidates: '+b.cands.map((c,ci)=>'['+ci+'] "'+stripExt(c.name)+'"').join(' ')+'\n'; });
+  const body=JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}});
+  let lastErr;
+  for(const model of AI_TEXT_MODELS){
+    try{
+      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
+      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+      if(!res.ok){ lastErr=new Error('HTTP '+res.status+' '+(await res.text()).slice(0,140)); continue; }
+      const data=await res.json();
+      const parts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
+      const txt=(parts[0]&&parts[0].text)||'[]';
+      let arr; try{ arr=JSON.parse(txt); }catch{ const m=txt.match(/\[[\s\S]*\]/); arr=m?JSON.parse(m[0]):[]; }
+      const picks={};
+      for(const p of (arr||[])){ const b=batch[p&&p.i]; if(!b) continue; const c=b.cands[p.c]; if(c) picks[b.name]=c; }
+      return picks;
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr||new Error('Gemini failed');
+}
 // ----- fixed category images (persistent fallback suggestions by keyword) -----
 state.fixed = JSON.parse(localStorage.getItem('fixedMap')||'[]');
 function saveFixed(){ localStorage.setItem('fixedMap', JSON.stringify(state.fixed)); }
@@ -1064,29 +1198,77 @@ $('fxAdd').addEventListener('click', async ()=>{
 });
 $('fxList').addEventListener('click', e=>{ const b=e.target.closest('.fxDel'); if(!b) return; state.fixed.splice(+b.dataset.i,1); saveFixed(); renderFixed(); });
 
-$('suggestBtn').addEventListener('click', ()=>{
-  const missing=pendingMiss().map(r=>r.name);   // only items that still need an image
+$('suggestBtn').addEventListener('click', async ()=>{
+  const rows=pendingMiss();                       // only items that still need an image
+  const missing=rows.map(r=>r.name);
   state.dismissed=new Set();
   if(!missing.length){ $('suggestProgress').textContent='مفيش أصناف ناقصة محتاجة صور.'; state.suggestBlocks=[]; renderSuggestions(); return; }
-  $('suggestProgress').textContent='بدوّر في المكتبة...';
-  const blocks=[];
-  for(const r of pendingMiss()){
-    const name=r.name;
-    const lib=findSuggestions(name);                                   // up to 4 same-language
-    // other-language suggestion: 2nd column name (looser) or a translation (stricter, to avoid far hits)
-    let other=[];
-    if(r.alt) other=findSuggestions(r.alt, 1, 0.5);
-    else { const tn=translateName(name); if(tn) other=findSuggestions(tn, 1, 0.6); }
-    other=other.map(it=>({id:it.id, name:it.name, otherLang:true}));
-    const fx=findFixed(name);                                          // fixed category fallbacks
-    const map=new Map(); [...lib, ...other, ...fx].forEach(it=>{ if(!map.has(it.id)) map.set(it.id, it); });
-    const sugg=[...map.values()].slice(0,7);
-    if(sugg.length) blocks.push({name, sugg});
-  }
-  state.suggestBlocks=blocks; renderSuggestions();
-  $('suggestProgress').innerHTML = blocks.length
-    ? `لقيت اقتراحات لـ <b>${blocks.length}</b> صنف من ${missing.length}. راجعها ودوس «أضيفها» للي يناسبك.`
-    : 'مفيش اقتراحات قريبة في المكتبة.';
+  const useEmb=$('aiEmb').checked, useGem=$('aiGem').checked;
+  const gemKey=($('gemKey').value||'').trim();
+  const gemNoKey = useGem && !gemKey;   // wanted Gemini but no key → run without it, warn at the end
+  $('suggestBtn').disabled=true; startOp();
+  const mapKey = it => it.id!=null ? ('id:'+it.id) : ('u:'+(it.url||it.name));
+  try{
+    $('suggestProgress').textContent = useEmb ? '🧠 بحمّل موديل الـ AI وبدوّر (أول مرة بياخد وقت)...' : 'بدوّر في المكتبة...';
+    const blocks=[]; const hard=[];
+    for(const r of rows){
+      if(state.cancel) break;
+      const name=r.name;
+      // same-language candidates: AI re-ranked (wider net) or lexical
+      let lib;
+      if(useEmb){ const pool=sameLangPool(name, 24); lib = pool.length ? await embRerank(name, pool, 4) : findSuggestions(name); }
+      else lib = findSuggestions(name);
+      // other-language: 2nd column name (looser) or a translation (stricter)
+      let other=[];
+      if(r.alt) other=findSuggestions(r.alt, 1, 0.5);
+      else { const tn=translateName(name); if(tn) other=findSuggestions(tn, 1, 0.6); }
+      other=other.map(it=>({id:it.id, name:it.name, file:it.file, otherLang:true}));
+      const fx=findFixed(name);                                          // fixed category fallbacks
+      const map=new Map(); [...lib, ...other, ...fx].forEach(it=>{ const k=mapKey(it); if(!map.has(k)) map.set(k, it); });
+      const sugg=[...map.values()].slice(0,7);
+      const block={name, sugg}; blocks.push(block);
+      // "weak" → hand to Gemini: nothing found, or the best same-language match doesn't
+      // contain ALL the distinctive query words (cross-language items are always weak here).
+      const qSet=new Set(normalizeName(name).split(' ').filter(w=>w.length>=2));
+      const best=lib[0];
+      let covered=false;
+      if(best && best._toks && qSet.size){ let ov=0; for(const w of best._toks) if(qSet.has(w)) ov++; covered = ov>=qSet.size; }
+      const weak = !sugg.length || !covered;
+      if(useGem && gemKey && weak) hard.push({block, name});
+    }
+    // Gemini smart pick for the hard ones (batched, cross-language aware)
+    if(useGem && gemKey && hard.length && !state.cancel){
+      $('suggestProgress').textContent='✨ بسأل Gemini على '+hard.length+' صنف صعب...';
+      const batch=hard.map(h=>{
+        const sl=sameLangPool(h.name, 20);
+        const tn=translateName(h.name); const ol = tn ? sameLangPool(tn, 15) : [];
+        const seen=new Set(), cands=[];
+        for(const it of [...sl, ...ol]){ if(seen.has(it.name)) continue; seen.add(it.name); cands.push(it); if(cands.length>=24) break; }
+        return {name:h.name, cands, block:h.block};
+      }).filter(b=>b.cands.length);
+      if(batch.length){
+        try{
+          const picks=await geminiPick(batch.map(b=>({name:b.name, cands:b.cands})), gemKey);
+          for(const b of batch){
+            const c=picks[b.name]; if(!c) continue;
+            const cand={id:c.id, name:c.name, file:c.file, ai:true, otherLang:(langOf(stripExt(c.name))!==langOf(b.name))};
+            const existing=b.block.sugg.find(s=>mapKey(s)===mapKey(cand));
+            if(existing) existing.ai=true;
+            else b.block.sugg.unshift(cand);
+            b.block.sugg=b.block.sugg.slice(0,7);
+          }
+        }catch(err){ $('suggestProgress').innerHTML='⚠️ Gemini: '+escapeHtml(err.message)+' — كمّلت باللفظي/الـ AI.'; }
+      }
+    }
+    state.suggestBlocks=blocks.filter(b=>b.sugg.length); renderSuggestions();
+    if(!(($('suggestProgress').textContent||'').startsWith('⚠️'))){
+      const note = gemNoKey ? ' <span style="color:#ffb38a">— ملحوظة: فعّلت ترشيح Gemini بس مفيش مفتاح؛ حُط مفتاح Gemini API فوق عشان يشتغل.</span>' : '';
+      $('suggestProgress').innerHTML = (state.suggestBlocks.length
+        ? `لقيت اقتراحات لـ <b>${state.suggestBlocks.length}</b> صنف من ${missing.length}. راجعها ودوس «أضيفها» للي يناسبك.`
+        : 'مفيش اقتراحات قريبة في المكتبة.') + note;
+    }
+  }catch(err){ $('suggestProgress').innerHTML='⚠️ '+escapeHtml(err.message); }
+  finally{ $('suggestBtn').disabled=false; endOp(); }
 });
 function renderSuggestions(){
   const box=$('suggestList');
@@ -1105,7 +1287,7 @@ function renderSuggestions(){
         </span>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">`;
-    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; html+=`<div style="text-align:center"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}"><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
+    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; const aib=it.ai?' <span class="lang-badge" style="background:rgba(120,200,120,.18);color:#8fd08f">✨AI</span>':''; html+=`<div style="text-align:center"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}"><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
     html+=`</div></div>`;
   });
   box.innerHTML=html;
