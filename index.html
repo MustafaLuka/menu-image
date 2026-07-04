@@ -480,7 +480,10 @@ function tr(ar){ return LANG==='en' ? (I18N[ar.trim()]||ar) : ar; }
 document.getElementById('langSw').addEventListener('click', e=>{ const b=e.target.closest('button[data-lang]'); if(b) applyLang(b.dataset.lang); });
 
 // ===================== Google sign-in gate (talabat.com only) =====================
-const AUTH = { CLIENT_ID: (localStorage.getItem('gClientId')||'').trim(), DOMAIN:'talabat.com', SESS_KEY:'authSession' };
+// Put your Google OAuth Client ID here so login works for EVERYONE on the cloud version
+// (no per-browser setup). A web Client ID is not a secret. localStorage can still override it.
+const DEFAULT_CLIENT_ID = '';
+const AUTH = { CLIENT_ID: ((localStorage.getItem('gClientId')||'').trim() || DEFAULT_CLIENT_ID), DOMAIN:'talabat.com', SESS_KEY:'authSession' };
 function b64urlToJson(s){ try{ s=s.replace(/-/g,'+').replace(/_/g,'/'); const d=atob(s); const u=escape(d); return JSON.parse(decodeURIComponent(u)); }catch(e){ try{ return JSON.parse(atob(s.replace(/-/g,'+').replace(/_/g,'/'))); }catch(_){ return null; } } }
 function getSession(){ try{ const s=JSON.parse(localStorage.getItem(AUTH.SESS_KEY)||'null'); if(s && s.exp && Date.now()<s.exp) return s; }catch(e){} return null; }
 function showGate(show){ document.getElementById('loginGate').classList.toggle('show', show); document.body.style.overflow = show?'hidden':''; }
