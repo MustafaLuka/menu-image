@@ -7,18 +7,53 @@
 <script src="libs/exceljs.min.js"></script>
 <script src="libs/jszip.min.js"></script>
 <script src="libs/pdf.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
-    --bg:#0f1720; --card:#161f2b; --line:#24303f; --txt:#e7eef7; --muted:#9fb0c3;
-    --accent:#ff5a1f; --accent2:#1f9d55; --green:#1f9d55; --red:#e0322f; --soft:#1d2733;
+    --bg:#0b1118; --bg2:#0f1620; --card:#141d29; --card2:#18222f; --line:#25313f;
+    --txt:#eef4fb; --muted:#9db0c5; --accent:#ff5a00; --accent-2:#ff7f33; --accent-ink:#fff;
+    --green:#22b06b; --red:#ec4340; --soft:#1a2431; --ring:rgba(255,90,0,.35);
+    --shadow:0 10px 30px rgba(0,0,0,.35); --shadow-sm:0 4px 14px rgba(0,0,0,.25); --radius:16px;
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt);line-height:1.6}
-  header{background:linear-gradient(135deg,#ff5a1f,#ff8a3d);padding:22px 20px;color:#fff}
-  header h1{margin:0;font-size:22px}
-  header p{margin:4px 0 0;opacity:.95;font-size:14px}
-  .wrap{max-width:1000px;margin:0 auto;padding:20px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:16px 0}
+  body{margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 100% -10%,rgba(255,90,0,.08),transparent 60%),var(--bg);
+    color:var(--txt);line-height:1.6;-webkit-font-smoothing:antialiased}
+  /* top bar */
+  .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:12px 20px;background:rgba(12,18,26,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:.2px}
+  .brand .logo{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:20px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 6px 16px var(--ring)}
+  .brand .bname{font-size:17px;line-height:1.1}
+  .brand .bname small{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px}
+  .topctrls{display:flex;align-items:center;gap:10px}
+  .langsw{display:flex;background:var(--soft);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .langsw button{background:transparent;color:var(--muted);border:0;padding:7px 12px;font-size:13px;font-weight:700;border-radius:0}
+  .langsw button.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff}
+  .userchip{display:flex;align-items:center;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:30px;padding:4px 6px 4px 12px;font-size:13px}
+  .userchip img{width:28px;height:28px;border-radius:50%;object-fit:cover}
+  .userchip .lo{background:transparent;border:0;color:var(--muted);font-size:15px;padding:2px 6px;cursor:pointer}
+  .hero{padding:20px 20px 4px}
+  .hero h1{margin:0;font-size:22px;font-weight:800}
+  .hero p{margin:4px 0 0;color:var(--muted);font-size:13.5px;max-width:820px}
+  /* login gate */
+  #loginGate{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;
+    background:radial-gradient(900px 500px at 50% -10%,rgba(255,90,0,.16),transparent 60%),var(--bg)}
+  #loginGate.show{display:flex}
+  .login-card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:30px 26px;box-shadow:var(--shadow);text-align:center}
+  .login-card .logo{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;display:grid;place-items:center;font-size:32px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 10px 26px var(--ring)}
+  .login-card h2{display:block;justify-content:center;font-size:21px;margin:0 0 4px}
+  .login-card .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .login-card .gbtn-wrap{display:flex;justify-content:center;min-height:44px}
+  .login-note{font-size:12px;color:var(--muted);margin-top:16px;line-height:1.7}
+  .login-err{color:#ff9a97;font-size:13px;margin-top:12px;min-height:18px}
+  .login-cfg{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px;text-align:start}
+  .login-cfg summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
+  .wrap{max-width:1040px;margin:0 auto;padding:12px 20px 28px}
+  .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin:16px 0;box-shadow:var(--shadow-sm)}
   .step-no{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;margin-left:8px}
   h2{font-size:17px;margin:0 0 12px;display:flex;align-items:center}
   label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
@@ -67,13 +102,62 @@
   .preview td,.preview th{white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
   #log{font-size:12.5px;color:var(--muted);margin-top:8px;min-height:18px}
   .badge{font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:2px 8px}
+  button{transition:transform .06s ease,filter .15s ease,box-shadow .15s ease;box-shadow:0 4px 12px var(--ring)}
+  button:not(.ghost):not(:disabled):hover{filter:brightness(1.06)}
+  button:not(:disabled):active{transform:translateY(1px)}
+  button.ghost{box-shadow:none}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+  .card h2 .step-no{box-shadow:0 4px 12px var(--ring)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:20px}
+  ::-webkit-scrollbar-track{background:transparent}
+  html[dir=ltr] th,html[dir=ltr] td{text-align:left}
+  html[dir=ltr] tr.found td:first-child{border-right:0;border-left:4px solid var(--green)}
+  html[dir=ltr] tr.miss td:first-child{border-right:0;border-left:4px solid var(--red)}
+  html[dir=ltr] .step-no{margin-left:0;margin-right:8px}
 </style>
 </head>
 <body>
-<header>
-  <h1>🍽️ مطابقة صور المنيو</h1>
-  <p>ارفع شيت المنيو، حدّد فولدر الصور، والتطبيق هيلوّن الأصناف اللي لاقي لها صور ويجمّعها في ملف ZIP.</p>
-</header>
+<!-- login gate (Google, talabat.com only) -->
+<div id="loginGate">
+  <div class="login-card">
+    <div class="logo">🍽️</div>
+    <h2>Talabat <span style="color:var(--accent)">By Luka</span></h2>
+    <div class="sub" data-i18n="login.sub">سجّل دخول بحساب talabat عشان تستخدم الأداة</div>
+    <div class="gbtn-wrap"><div id="gBtn"></div></div>
+    <div id="loginErr" class="login-err"></div>
+    <div class="login-note">الدخول متاح لحسابات ‎@talabat.com‎ فقط</div>
+    <details class="login-cfg" id="loginCfg">
+      <summary data-i18n="login.cfg">إعدادات (Google Client ID)</summary>
+      <label data-i18n="login.cfgLabel">Google OAuth Client ID</label>
+      <input type="text" id="gClientId" placeholder="xxxxxx.apps.googleusercontent.com">
+      <div class="hint" style="margin-top:6px" data-i18n="login.cfgHint">هات Client ID من Google Cloud Console → Credentials، وحط الـ origin بتاع الموقع في Authorized JavaScript origins.</div>
+      <button id="gSave" class="ghost" style="margin-top:8px;padding:8px 14px;font-size:13px" data-i18n="login.save">حفظ وإعادة تحميل</button>
+    </details>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="logo">🍽️</div>
+    <div class="bname">Talabat <span style="color:var(--accent)">By Luka</span><small data-i18n="brand.tag">Menu Image Matcher</small></div>
+  </div>
+  <div class="topctrls">
+    <div class="langsw" id="langSw">
+      <button data-lang="ar">العربية</button>
+      <button data-lang="en">English</button>
+    </div>
+    <div id="userChip" class="userchip" style="display:none">
+      <img id="userPic" src="" alt=""><span id="userName"></span>
+      <button class="lo" id="logoutBtn" title="خروج">⎋</button>
+    </div>
+  </div>
+</div>
+
+<div class="hero">
+  <h1 data-i18n="hero.title">🍽️ مطابقة صور المنيو</h1>
+  <p data-i18n="hero.sub">ارفع شيت المنيو، حدّد فولدر الصور، والتطبيق هيلوّن الأصناف اللي لاقي لها صور ويجمّعها في ملف ZIP.</p>
+</div>
 
 <div class="wrap">
 
@@ -299,6 +383,151 @@
 </div>
 
 <script>
+// ===================== i18n: Arabic (default) + English toggle =====================
+// Source-keyed: keys are the exact trimmed Arabic text as it appears in the markup.
+// Anything not in the map stays Arabic (graceful). Dynamic/data areas are left as-is.
+const I18N = {
+  // topbar / hero / login
+  '🍽️ مطابقة صور المنيو':'🍽️ Menu Image Matcher',
+  'ارفع شيت المنيو، حدّد فولدر الصور، والتطبيق هيلوّن الأصناف اللي لاقي لها صور ويجمّعها في ملف ZIP.':'Upload the menu sheet, point to your image folder, and the app flags items that have images and bundles them into a ZIP.',
+  'سجّل دخول بحساب talabat عشان تستخدم الأداة':'Sign in with your talabat account to use the tool',
+  'الدخول متاح لحسابات ‎@talabat.com‎ فقط':'Access is restricted to ‎@talabat.com‎ accounts only',
+  'إعدادات (Google Client ID)':'Settings (Google Client ID)',
+  'هات Client ID من Google Cloud Console → Credentials، وحط الـ origin بتاع الموقع في Authorized JavaScript origins.':'Get a Client ID from Google Cloud Console → Credentials, and add this site\'s origin to Authorized JavaScript origins.',
+  'حفظ وإعادة تحميل':'Save & reload',
+  // step 1 — library
+  'مكتبة الصور':'Image library',
+  '⏳ بحمّل مكتبة الصور من الباك إند المحلي...':'⏳ Loading the image library from the local backend...',
+  '🔄 تحديث المكتبة':'🔄 Refresh library',
+  '🏷️ صور ثابتة للتصنيفات (احتياطية في الاقتراحات)':'🏷️ Fixed category images (fallback in suggestions)',
+  'حُط كلمات مفتاحية + صورة. أي صنف ناقص فيه الكلمة دي هتظهر له الصورة دي في الاقتراحات. (بتتحفظ بشكل دائم)':'Add keywords + an image. Any missing item containing the keyword will show this image in suggestions. (saved permanently)',
+  'كلمات مفتاحية (بفاصلة)':'Keywords (comma-separated)',
+  'الصورة':'Image','الصور':'Images','➕ أضف':'➕ Add',
+  '☁️ ضيف صور للمكتبة السحابية (للكل)':'☁️ Add images to the cloud library (shared)',
+  'حجم كل صورة (KB)':'Each image size (KB)','☁️ ضيف وارفع':'☁️ Add & upload',
+  'اختيار فولدر كامل بدل ملفات':'Pick a whole folder instead of files',
+  'الصور (تقدر تختار كذا واحدة)':'Images (you can pick several)',
+  // step 2 — menu
+  'المنيو':'Menu','طريقة إدخال المنيو:':'Menu input method:',
+  '📄 ملف Excel':'📄 Excel file','📝 لصق كتابة':'📝 Paste text','📕 PDF':'📕 PDF',
+  'ارفع ملف المنيو (.xlsx)':'Upload the menu file (.xlsx)',
+  'استخدم النص ده':'Use this text',
+  '📄 صفحة المنيو':'📄 Menu sheet','اختار الشيت اللي فيه المنيو':'Pick the sheet that has the menu',
+  '🔢 صف العناوين':'🔢 Header row','الصف اللي فيه أسماء الأعمدة (غالبًا 1)':'The row with column names (usually 1)',
+  '🍽️ عمود اسم الصنف':'🍽️ Item name column','العمود اللي فيه أسماء الأكلات':'The column with the food names',
+  '🌐 عمود لغة تانية (اختياري)':'🌐 Second-language column (optional)','لو الصنف مش لاقيه بلغة، يجرّب اللغة دي':'If an item isn\'t found in one language, it tries this one',
+  // step 3 — run
+  'طابِق وكوّن النتيجة':'Match & build the result','🔍 طابِق دلوقتي':'🔍 Match now','⏹️ إيقاف':'⏹️ Stop',
+  'مرادفات / كلمات بنفس المعنى (كل سطر مجموعة، الأول هو الأساسي). بتتحفظ تلقائيًا.':'Synonyms / same-meaning words (one group per line, first is canonical). Saved automatically.',
+  // results
+  '📊 النتيجة':'📊 Result','إجمالي الأصناف':'Total items','لاقي لها صور':'Have images','مش موجودة':'Missing','صور في الـ ZIP':'Images in ZIP','اتظبط بإعادة الترتيب':'Fixed by reordering',
+  'ضغط كل الصور عند التحميل':'Compress all images on download','KB':'KB',
+  '⬇️ تحميل الشيت الملوّن (.xlsx)':'⬇️ Download the marked sheet (.xlsx)','⬇️ تحميل صور المطابقة (.zip)':'⬇️ Download matched images (.zip)',
+  'صورة':'Image','اسم الصنف':'Item name','الحالة':'Status','اسم الملف في الـ ZIP (للتعديل)':'File name in the ZIP (editable)','بدّل':'Swap',
+  // gemini + suggestions
+  '✨ الأصناف الناقصة → برومت Gemini':'✨ Missing items → Gemini prompt',
+  'تعليمات البرومت:':'Prompt instructions:','‹ السابق':'‹ Prev','التالي ›':'Next ›',
+  '📋 نسخ البرومت':'📋 Copy prompt','🌐 نسخ + افتح Gemini':'🌐 Copy + open Gemini',
+  '🎨 ولّد كل الصور الناقصة أوتوماتيك':'🎨 Auto-generate all missing images',
+  'موديل توليد الصور':'Image generation model',
+  '📥 استورد صور Gemini: سمّيها باسم الصنف، اضغطها، ضيفها للمكتبة، واجمعها مع الموجود.':'📥 Import Gemini images: name them by item, compress, add to the library, and combine with existing.',
+  '📦 ارفعهم كلهم مرة واحدة (صور متعددة أو ملف ZIP)':'📦 Upload them all at once (multiple images or a ZIP)',
+  'أو صورة لكل صنف على حدة:':'Or one image per item:',
+  '⬇️ نزّل الصور المستوردة (ZIP)':'⬇️ Download imported images (ZIP)','⬇️ نزّل الكل (موجودة + مستوردة) ZIP':'⬇️ Download all (found + imported) ZIP',
+  '🤖 اقترحلي صور للناقص':'🤖 Suggest images for missing',
+  '🧠 إعادة ترتيب بالـ AI (في المتصفح — مجاني، بيحمّل موديل أول مرة)':'🧠 AI re-ranking (in-browser — free, loads a model the first time)',
+  '✨ ترشيح بـ Gemini للحالات الصعبة وعبر اللغات (بيستخدم مفتاح Gemini)':'✨ Gemini picking for hard/cross-language cases (uses the Gemini key)',
+  // resizer + footer
+  '🛠️ أداة تغيير حجم الصور (مستقلة)':'🛠️ Image resizer tool (standalone)',
+  'ارفع أي صور واختار الحجم — التطبيق يظبّطهم كلهم على الحجم ده (تكبير أو تصغير) وينزّلهم ZIP. مستقلة تمامًا عن المنيو.':'Upload any images and choose a size — the app fits them all to that size (up or down) and downloads a ZIP. Fully independent from the menu.',
+  'الحجم المطلوب (KB)':'Target size (KB)','🛠️ غيّر الحجم ونزّل':'🛠️ Resize & download',
+  'يشتغل كله في المتصفح — مفيش أي بيانات بتطلع لأي سيرفر. 🔒':'Everything runs in your browser — no data leaves for any server. 🔒',
+};
+let LANG = localStorage.getItem('lang') || 'ar';
+const _origText = new WeakMap();
+const _skipTags = {SCRIPT:1,STYLE:1,TEXTAREA:1,INPUT:1,SELECT:1,OPTION:1,NOSCRIPT:1};
+function _translateTextNodes(root){
+  const w=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode(n){
+    if(!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+    if(n.parentElement && (_skipTags[n.parentElement.tagName] || n.parentElement.closest('.notranslate'))) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  const nodes=[]; let n; while(n=w.nextNode()) nodes.push(n);
+  for(const node of nodes){
+    if(!_origText.has(node)) _origText.set(node, node.nodeValue);
+    const orig=_origText.get(node); const key=orig.trim();
+    if(LANG==='en'){ const en=I18N[key]; if(en!=null) node.nodeValue = orig.replace(key, en); }
+    else node.nodeValue = orig;
+  }
+}
+function _translatePlaceholders(){
+  document.querySelectorAll('[placeholder]').forEach(el=>{
+    if(!el.__ph) el.__ph=el.getAttribute('placeholder');
+    const en=I18N[el.__ph.trim()];
+    el.setAttribute('placeholder', (LANG==='en'&&en!=null)?en:el.__ph);
+  });
+}
+function applyLang(lang){
+  LANG = (lang==='en')?'en':'ar'; localStorage.setItem('lang', LANG);
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = LANG==='ar' ? 'rtl' : 'ltr';
+  _translateTextNodes(document.body);
+  _translatePlaceholders();
+  document.querySelectorAll('#langSw button').forEach(b=> b.classList.toggle('on', b.dataset.lang===LANG));
+}
+// tr() for a few dynamic strings we build in JS
+function tr(ar){ return LANG==='en' ? (I18N[ar.trim()]||ar) : ar; }
+document.getElementById('langSw').addEventListener('click', e=>{ const b=e.target.closest('button[data-lang]'); if(b) applyLang(b.dataset.lang); });
+
+// ===================== Google sign-in gate (talabat.com only) =====================
+const AUTH = { CLIENT_ID: (localStorage.getItem('gClientId')||'').trim(), DOMAIN:'talabat.com', SESS_KEY:'authSession' };
+function b64urlToJson(s){ try{ s=s.replace(/-/g,'+').replace(/_/g,'/'); const d=atob(s); const u=escape(d); return JSON.parse(decodeURIComponent(u)); }catch(e){ try{ return JSON.parse(atob(s.replace(/-/g,'+').replace(/_/g,'/'))); }catch(_){ return null; } } }
+function getSession(){ try{ const s=JSON.parse(localStorage.getItem(AUTH.SESS_KEY)||'null'); if(s && s.exp && Date.now()<s.exp) return s; }catch(e){} return null; }
+function showGate(show){ document.getElementById('loginGate').classList.toggle('show', show); document.body.style.overflow = show?'hidden':''; }
+function renderUser(s){
+  const chip=document.getElementById('userChip');
+  if(s){ document.getElementById('userName').textContent=s.name||s.email; document.getElementById('userPic').src=s.picture||''; chip.style.display='flex'; }
+  else chip.style.display='none';
+}
+function onCredential(resp){
+  const err=document.getElementById('loginErr'); err.textContent='';
+  const p = resp && resp.credential ? b64urlToJson(resp.credential.split('.')[1]) : null;
+  if(!p){ err.textContent = tr('فشل تسجيل الدخول، جرّب تاني.'); return; }
+  const email=(p.email||'').toLowerCase();
+  const okDomain = p.hd===AUTH.DOMAIN || email.endsWith('@'+AUTH.DOMAIN);
+  if(!p.email_verified || !okDomain){ err.textContent = LANG==='en'?'Only @talabat.com accounts are allowed.':'مسموح بحسابات @talabat.com بس.'; return; }
+  const exp = (p.exp?p.exp*1000:Date.now()+8*3600*1000);
+  const s={ email, name:p.name, picture:p.picture, exp };
+  localStorage.setItem(AUTH.SESS_KEY, JSON.stringify(s));
+  renderUser(s); showGate(false);
+}
+window.onCredential = onCredential;
+function initAuth(){
+  const s=getSession();
+  if(s){ renderUser(s); showGate(false); return; }
+  showGate(true);
+  if(!AUTH.CLIENT_ID){ document.getElementById('loginErr').textContent = LANG==='en'?'Set a Google Client ID in Settings below to enable sign-in.':'حُط Google Client ID في الإعدادات تحت عشان تفعّل الدخول.'; document.getElementById('loginCfg').open=true; return; }
+  function boot(){
+    if(!(window.google&&google.accounts&&google.accounts.id)){ return setTimeout(boot,300); }
+    try{
+      google.accounts.id.initialize({ client_id:AUTH.CLIENT_ID, callback:onCredential, hd:AUTH.DOMAIN, auto_select:false });
+      const el=document.getElementById('gBtn'); el.innerHTML='';
+      google.accounts.id.renderButton(el, { theme:'filled_black', size:'large', shape:'pill', text:'signin_with', width:280 });
+    }catch(e){ document.getElementById('loginErr').textContent=String(e.message||e); }
+  }
+  boot();
+}
+document.getElementById('gClientId').value = AUTH.CLIENT_ID;
+document.getElementById('gSave').addEventListener('click', ()=>{ localStorage.setItem('gClientId', document.getElementById('gClientId').value.trim()); location.reload(); });
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  localStorage.removeItem(AUTH.SESS_KEY);
+  try{ if(window.google&&google.accounts&&google.accounts.id) google.accounts.id.disableAutoSelect(); }catch(e){}
+  location.reload();
+});
+// boot i18n + auth
+applyLang(LANG);
+initAuth();
+
 // ===================== Arabic/English name normalization =====================
 function baseNormalize(s){
   if(s===null||s===undefined) return '';
