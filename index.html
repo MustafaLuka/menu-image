@@ -7,7 +7,6 @@
 <script src="libs/exceljs.min.js"></script>
 <script src="libs/jszip.min.js"></script>
 <script src="libs/pdf.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --bg:#0b1118; --bg2:#0f1620; --card:#141d29; --card2:#18222f; --line:#25313f;
@@ -118,25 +117,6 @@
 </style>
 </head>
 <body>
-<!-- login gate (Google, talabat.com only) -->
-<div id="loginGate">
-  <div class="login-card">
-    <div class="logo">🍽️</div>
-    <h2>Talabat <span style="color:var(--accent)">By Luka</span></h2>
-    <div class="sub" data-i18n="login.sub">سجّل دخول بحساب talabat عشان تستخدم الأداة</div>
-    <div class="gbtn-wrap"><div id="gBtn"></div></div>
-    <div id="loginErr" class="login-err"></div>
-    <div class="login-note">الدخول متاح لحسابات ‎@talabat.com‎ فقط</div>
-    <details class="login-cfg" id="loginCfg">
-      <summary data-i18n="login.cfg">إعدادات (Google Client ID)</summary>
-      <label data-i18n="login.cfgLabel">Google OAuth Client ID</label>
-      <input type="text" id="gClientId" placeholder="xxxxxx.apps.googleusercontent.com">
-      <div class="hint" style="margin-top:6px" data-i18n="login.cfgHint">هات Client ID من Google Cloud Console → Credentials، وحط الـ origin بتاع الموقع في Authorized JavaScript origins.</div>
-      <button id="gSave" class="ghost" style="margin-top:8px;padding:8px 14px;font-size:13px" data-i18n="login.save">حفظ وإعادة تحميل</button>
-    </details>
-  </div>
-</div>
-
 <div class="topbar">
   <div class="brand">
     <div class="logo">🍽️</div>
@@ -146,10 +126,6 @@
     <div class="langsw" id="langSw">
       <button data-lang="ar">العربية</button>
       <button data-lang="en">English</button>
-    </div>
-    <div id="userChip" class="userchip" style="display:none">
-      <img id="userPic" src="" alt=""><span id="userName"></span>
-      <button class="lo" id="logoutBtn" title="خروج">⎋</button>
     </div>
   </div>
 </div>
@@ -479,57 +455,8 @@ function applyLang(lang){
 function tr(ar){ return LANG==='en' ? (I18N[ar.trim()]||ar) : ar; }
 document.getElementById('langSw').addEventListener('click', e=>{ const b=e.target.closest('button[data-lang]'); if(b) applyLang(b.dataset.lang); });
 
-// ===================== Google sign-in gate (talabat.com only) =====================
-// Put your Google OAuth Client ID here so login works for EVERYONE on the cloud version
-// (no per-browser setup). A web Client ID is not a secret. localStorage can still override it.
-const DEFAULT_CLIENT_ID = '';
-const AUTH = { CLIENT_ID: ((localStorage.getItem('gClientId')||'').trim() || DEFAULT_CLIENT_ID), DOMAIN:'talabat.com', SESS_KEY:'authSession' };
-function b64urlToJson(s){ try{ s=s.replace(/-/g,'+').replace(/_/g,'/'); const d=atob(s); const u=escape(d); return JSON.parse(decodeURIComponent(u)); }catch(e){ try{ return JSON.parse(atob(s.replace(/-/g,'+').replace(/_/g,'/'))); }catch(_){ return null; } } }
-function getSession(){ try{ const s=JSON.parse(localStorage.getItem(AUTH.SESS_KEY)||'null'); if(s && s.exp && Date.now()<s.exp) return s; }catch(e){} return null; }
-function showGate(show){ document.getElementById('loginGate').classList.toggle('show', show); document.body.style.overflow = show?'hidden':''; }
-function renderUser(s){
-  const chip=document.getElementById('userChip');
-  if(s){ document.getElementById('userName').textContent=s.name||s.email; document.getElementById('userPic').src=s.picture||''; chip.style.display='flex'; }
-  else chip.style.display='none';
-}
-function onCredential(resp){
-  const err=document.getElementById('loginErr'); err.textContent='';
-  const p = resp && resp.credential ? b64urlToJson(resp.credential.split('.')[1]) : null;
-  if(!p){ err.textContent = tr('فشل تسجيل الدخول، جرّب تاني.'); return; }
-  const email=(p.email||'').toLowerCase();
-  const okDomain = p.hd===AUTH.DOMAIN || email.endsWith('@'+AUTH.DOMAIN);
-  if(!p.email_verified || !okDomain){ err.textContent = LANG==='en'?'Only @talabat.com accounts are allowed.':'مسموح بحسابات @talabat.com بس.'; return; }
-  const exp = (p.exp?p.exp*1000:Date.now()+8*3600*1000);
-  const s={ email, name:p.name, picture:p.picture, exp };
-  localStorage.setItem(AUTH.SESS_KEY, JSON.stringify(s));
-  renderUser(s); showGate(false);
-}
-window.onCredential = onCredential;
-function initAuth(){
-  const s=getSession();
-  if(s){ renderUser(s); showGate(false); return; }
-  showGate(true);
-  if(!AUTH.CLIENT_ID){ document.getElementById('loginErr').textContent = LANG==='en'?'Set a Google Client ID in Settings below to enable sign-in.':'حُط Google Client ID في الإعدادات تحت عشان تفعّل الدخول.'; document.getElementById('loginCfg').open=true; return; }
-  function boot(){
-    if(!(window.google&&google.accounts&&google.accounts.id)){ return setTimeout(boot,300); }
-    try{
-      google.accounts.id.initialize({ client_id:AUTH.CLIENT_ID, callback:onCredential, hd:AUTH.DOMAIN, auto_select:false });
-      const el=document.getElementById('gBtn'); el.innerHTML='';
-      google.accounts.id.renderButton(el, { theme:'filled_black', size:'large', shape:'pill', text:'signin_with', width:280 });
-    }catch(e){ document.getElementById('loginErr').textContent=String(e.message||e); }
-  }
-  boot();
-}
-document.getElementById('gClientId').value = AUTH.CLIENT_ID;
-document.getElementById('gSave').addEventListener('click', ()=>{ localStorage.setItem('gClientId', document.getElementById('gClientId').value.trim()); location.reload(); });
-document.getElementById('logoutBtn').addEventListener('click', ()=>{
-  localStorage.removeItem(AUTH.SESS_KEY);
-  try{ if(window.google&&google.accounts&&google.accounts.id) google.accounts.id.disableAutoSelect(); }catch(e){}
-  location.reload();
-});
-// boot i18n + auth
+// Access control (talabat sign-in) is handled by the vibehost host — no in-app login gate.
 applyLang(LANG);
-initAuth();
 
 // ===================== Arabic/English name normalization =====================
 function baseNormalize(s){
