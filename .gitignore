@@ -1,6 +1,7 @@
 # the image library is huge (GBs) and machine-specific — never commit it
 images/
 images_dir.txt
+cloud_images/
 
 # runtime / test artifacts
 _*
