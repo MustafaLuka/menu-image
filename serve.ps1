@@ -208,6 +208,46 @@ while ($listener.IsListening) {
       } catch { $r = @{ ok=$false; error=$_.Exception.Message } }
       Send-Text $ctx (ConvertTo-Json $r -Compress) 'application/json; charset=utf-8'
     }
+    elseif ($path -eq '/api/cloud-add' -and $ctx.Request.HttpMethod -eq 'POST') {
+      # add ONE (already-resized) image to the cloud library staging folder + append to index.json.
+      # body: { name, b64, pull }  ; pull=true on the first image -> refresh local index.json from R2 first.
+      $reader = New-Object System.IO.StreamReader($ctx.Request.InputStream, [System.Text.Encoding]::UTF8)
+      $bodyText = $reader.ReadToEnd(); $reader.Close()
+      $r = $null
+      try {
+        $req = $bodyText | ConvertFrom-Json
+        $cloudDir = Join-Path $root 'cloud_images'
+        $imgDir   = Join-Path $cloudDir 'img'
+        $idxPath  = Join-Path $cloudDir 'index.json'
+        New-Item -ItemType Directory -Force -Path $imgDir | Out-Null
+        if ($req.pull -or -not $script:cloudList) {
+          if ($req.pull) { try { & rclone copyto "r2:menu-images/index.json" $idxPath 2>&1 | Out-Null } catch {} }
+          $script:cloudList = New-Object System.Collections.ArrayList
+          if (Test-Path -LiteralPath $idxPath) {
+            $ex = [System.IO.File]::ReadAllText($idxPath,[System.Text.Encoding]::UTF8) | ConvertFrom-Json
+            foreach ($e in $ex) { [void]$script:cloudList.Add([pscustomobject]@{ id=$e.id; name=$e.name; file=$e.file }) }
+          }
+          $script:cloudNextId = 0
+          if ($script:cloudList.Count) { $script:cloudNextId = (($script:cloudList | Measure-Object id -Maximum).Maximum + 1) }
+        }
+        $id = $script:cloudNextId; $script:cloudNextId++
+        [System.IO.File]::WriteAllBytes((Join-Path $imgDir "$id.jpg"), [Convert]::FromBase64String($req.b64))
+        [void]$script:cloudList.Add([pscustomobject]@{ id=$id; name=([string]$req.name); file="img/$id.jpg" })
+        [System.IO.File]::WriteAllText($idxPath, (ConvertTo-Json $script:cloudList.ToArray() -Compress), (New-Object System.Text.UTF8Encoding($false)))
+        $r = @{ ok=$true; id=$id; total=$script:cloudList.Count }
+      } catch { $r = @{ ok=$false; error=$_.Exception.Message } }
+      Send-Text $ctx (ConvertTo-Json $r -Compress) 'application/json; charset=utf-8'
+    }
+    elseif ($path -eq '/api/cloud-push' -and $ctx.Request.HttpMethod -eq 'POST') {
+      # upload the staging folder (new img/*.jpg + updated index.json) to R2 — makes it live for everyone.
+      $r = $null
+      try {
+        $cloudDir = Join-Path $root 'cloud_images'
+        $out = & rclone copy $cloudDir "r2:menu-images" --transfers=16 2>&1 | Out-String
+        $r = @{ ok=$true; total=($script:cloudList).Count; msg=($out.Trim()) }
+      } catch { $r = @{ ok=$false; error=$_.Exception.Message } }
+      Send-Text $ctx (ConvertTo-Json $r -Compress) 'application/json; charset=utf-8'
+    }
     else {
       $rel  = $path.TrimStart('/')
       $full = [System.IO.Path]::GetFullPath((Join-Path $root $rel))

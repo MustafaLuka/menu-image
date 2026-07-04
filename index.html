@@ -94,6 +94,18 @@
       <div id="fxProgress" class="hint" style="margin-top:4px"></div>
       <div id="fxList" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px"></div>
     </div>
+
+    <div id="cloudAddBox" style="margin-top:14px;border-top:1px solid var(--line);padding-top:10px">
+      <label>☁️ ضيف صور للمكتبة السحابية (للكل)</label>
+      <div class="hint">اختار صور أو فولدر أو ملف ZIP — التطبيق يظبّط حجم كل صورة على <b>الحجم اللي تحت</b>، يرفعهم على السحابة، ويسجّلهم أوتوماتيك. الأسماء بتفضل زي ما هي. بيشتغل من النسخة المحلية بس.</div>
+      <div class="row" style="align-items:flex-end;margin-top:6px">
+        <div><label>الصور (تقدر تختار كذا واحدة)</label><input type="file" id="cloudFiles" accept="image/*,.zip" multiple></div>
+        <div style="flex:0 0 auto"><label>حجم كل صورة (KB)</label><input type="number" id="cloudKB" value="300" min="20" max="2000" style="width:90px"></div>
+        <div style="flex:0 0 auto"><button id="cloudAddBtn">☁️ ضيف وارفع</button></div>
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="cloudFolder" style="width:auto"> اختيار فولدر كامل بدل ملفات</label>
+      <div id="cloudAddProgress" class="hint" style="margin-top:6px"></div>
+    </div>
   </div>
 
   <!-- STEP 2: menu -->
@@ -1176,6 +1188,61 @@ function renderFixed(){
   }).join('');
 }
 function blobToDataUrl(blob){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); }); }
+
+// ----- add images to the CLOUD library (local backend uploads to R2 + updates index.json) -----
+if(CLOUD){ const cb=$('cloudAddBox'); if(cb){ cb.querySelector('.row').style.display='none'; cb.querySelector('#cloudFolder').closest('label').style.display='none'; $('cloudAddProgress').innerHTML='☁️ الإضافة للمكتبة بتتم من <b>النسخة المحلية</b> (اللي فيها rclone). افتح التطبيق محليًا وضيف من هناك، والصور هتظهر للكل هنا على طول.'; } }
+$('cloudFolder').addEventListener('change', e=>{ const inp=$('cloudFiles'); if(e.target.checked) inp.setAttribute('webkitdirectory',''); else inp.removeAttribute('webkitdirectory'); inp.value=''; });
+async function gatherCloudImages(fileList){
+  const out=[];  // {name, file(Blob)}
+  for(const f of fileList){
+    if(/\.zip$/i.test(f.name)){
+      const zip=await JSZip.loadAsync(f);
+      const ents=Object.values(zip.files).filter(z=>!z.dir && /\.(jpe?g|png|webp)$/i.test(z.name));
+      for(const z of ents){ const blob=await z.async('blob'); out.push({name:z.name.split('/').pop(), file:blob}); }
+    } else if(/\.(jpe?g|png|webp)$/i.test(f.name)){
+      out.push({name:f.name, file:f});
+    }
+  }
+  return out;
+}
+$('cloudAddBtn').addEventListener('click', async ()=>{
+  if(CLOUD) return;
+  const picked=[...$('cloudFiles').files];
+  if(!picked.length){ $('cloudAddProgress').textContent='اختار صور أو ZIP الأول.'; return; }
+  const kb=parseInt($('cloudKB').value)||300;
+  $('cloudAddBtn').disabled=true; startOp();
+  $('cloudAddProgress').textContent='بجهّز الصور...';
+  try{
+    const imgs=await gatherCloudImages(picked);
+    if(!imgs.length){ $('cloudAddProgress').textContent='مفيش صور صالحة في اللي اخترته.'; return; }
+    let ok=0, fail=0;
+    for(let i=0;i<imgs.length;i++){
+      if(state.cancel) break;
+      const im=imgs[i];
+      $('cloudAddProgress').textContent=`بضغط وبرفع ${i+1}/${imgs.length}: ${im.name} ...`;
+      try{
+        const blob=await resizeToKB(im.file, kb, true);              // grow/shrink to exactly ~kb, keep name
+        const b64=await blobToB64(blob);
+        const res=await fetch('/api/cloud-add',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({name:im.name, b64, pull:(ok===0&&fail===0)})}).then(r=>r.json());
+        if(!(res&&res.ok)) throw new Error((res&&res.error)||'فشل');
+        ok++;
+      }catch(err){ fail++; }
+    }
+    if(ok && !state.cancel){
+      $('cloudAddProgress').textContent=`بيرفع ${ok} صورة على السحابة... (rclone)`;
+      const push=await fetch('/api/cloud-push',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
+      if(!(push&&push.ok)) throw new Error('الرفع فشل: '+((push&&push.error)||''));
+      $('cloudAddProgress').innerHTML=`✅ اتضافت <b>${ok}</b> صورة للمكتبة السحابية${fail?` (فشل ${fail})`:''} — المكتبة دلوقتي <b>${push.total}</b> صورة ومتاحة للكل. اعمل «تحديث المكتبة» في النسخة السحابية عشان تظهر.`;
+      $('cloudFiles').value='';
+    } else if(state.cancel){
+      $('cloudAddProgress').innerHTML=`⏹️ اتوقف — اتحضّر ${ok} صورة بس ماترفعتش. دوس تاني عشان تكمّل.`;
+    } else {
+      $('cloudAddProgress').textContent=`ماترفعش حاجة (فشل ${fail}).`;
+    }
+  }catch(err){ $('cloudAddProgress').innerHTML='⚠️ '+escapeHtml(String(err.message||err)); }
+  finally{ $('cloudAddBtn').disabled=false; endOp(); }
+});
 $('fxAdd').addEventListener('click', async ()=>{
   const kw=$('fxKeywords').value.split(/[,،]/).map(s=>s.trim()).filter(Boolean);
   const file=$('fxFile').files[0];
