@@ -355,6 +355,19 @@ const state = { images:{ normMap:new Map(), tightMap:new Map(), count:0 },
 const $ = id => document.getElementById(id);
 function log(msg){ $('log').textContent = msg; }
 
+// ===================== data source: local backend vs cloud (R2) =====================
+const R2_BASE = 'https://pub-766d8c07347340acb443134a726ff36a.r2.dev';
+// CLOUD mode when NOT served from the local backend (127.0.0.1). Force with ?cloud=1 / ?cloud=0.
+const _p = new URLSearchParams(location.search);
+const CLOUD = _p.has('cloud') ? _p.get('cloud')==='1'
+            : !(location.hostname==='127.0.0.1' || location.hostname==='localhost');
+// URL to fetch an image: cloud uses its R2 file key, local uses the backend id. A direct .url wins (own/fixed).
+function imgUrl(it){
+  if(it && it.url) return it.url;
+  if(CLOUD && it && it.file!=null) return R2_BASE + '/' + String(it.file).split('/').map(encodeURIComponent).join('/');
+  return '/api/file?id=' + (it && it.id!=null ? it.id : it);
+}
+
 // ===================== STEP 1: image library (from backend) =====================
 // Build lookup maps from the cached list. Keys are language-prefixed ('ar|'/'en|')
 // so Arabic names only match Arabic images and English only English.
@@ -374,23 +387,26 @@ function buildImageMaps(){
   state.images = { normMap, tightMap, sortedMap, count:list.length, ar, en };
 }
 async function loadLibrary(){
-  $('imgInfo').innerHTML = '⏳ بحمّل مكتبة الصور من الباك إند المحلي...';
+  $('imgInfo').innerHTML = CLOUD ? '⏳ بحمّل مكتبة الصور من السحابة...' : '⏳ بحمّل مكتبة الصور من الباك إند المحلي...';
   try{
-    const res = await fetch('/api/images', {cache:'no-store'});
+    const url = CLOUD ? (R2_BASE + '/index.json?t=' + Date.now()) : '/api/images';
+    const res = await fetch(url, {cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
-    const list = await res.json(); // [{id, name}]
+    const list = await res.json(); // local: [{id,name}]  cloud: [{id,name,file}]
     state.rawList = list;
     buildImageMaps();
     const x = state.images;
     $('imgInfo').innerHTML = list.length
-      ? `✅ المكتبة جاهزة: <b>${list.length}</b> صورة (عربي: ${x.ar} · إنجليزي: ${x.en}).`
-      : '⚠️ المكتبة فاضية — حُط ملف الـ ZIP الكبير (أو الصور) في فولدر <b>images</b> اللي جنب التطبيق، وبعدين دوس «تحديث المكتبة».';
+      ? `✅ المكتبة جاهزة${CLOUD?' (سحابة)':''}: <b>${list.length}</b> صورة (عربي: ${x.ar} · إنجليزي: ${x.en}).`
+      : '⚠️ المكتبة فاضية.';
   }catch(err){
     state.images = { normMap:new Map(), tightMap:new Map(), sortedMap:new Map(), count:0, ar:0, en:0 };
-    $('imgInfo').innerHTML = '❌ مش لاقي الباك إند. اقفل الصفحة دي وشغّل ملف <b>start.bat</b> — هو اللي هيفتح الصفحة على المنفذ الصح لوحده (متفتحش index.html بالدبل كليك).';
+    $('imgInfo').innerHTML = CLOUD
+      ? '❌ مش قادر أوصل لمكتبة السحابة. اتأكد إن الرفع خلّص وإن index.json موجود على R2.'
+      : '❌ مش لاقي الباك إند. شغّل <b>start.bat</b> (متفتحش index.html بالدبل كليك).';
   }
   maybeEnableRun();
-  if(typeof renderFixed==='function') renderFixed();   // show fixed-category images once ids resolve
+  if(typeof renderFixed==='function') renderFixed();
 }
 $('refreshImgs').addEventListener('click', loadLibrary);
 // synonyms editor: rebuild synonyms + library maps when edited
@@ -718,7 +734,7 @@ function renderResults(){
         ? `<button class="swap" data-i="${i}">🔄 بدّل (${row.chosenIdx+1}/${n})</button>`
         : `<span class="muted" style="font-size:12px">الصورة الوحيدة</span>`;
       tr.innerHTML=`
-        <td><img class="thumb clk" data-i="${i}" src="/api/file?id=${cand.id}" title="اضغط للتكبير"></td>
+        <td><img class="thumb clk" data-i="${i}" src="${imgUrl(cand)}" title="اضغط للتكبير"></td>
         <td>${escapeHtml(row.name)}</td>
         <td>${badge}</td>
         <td><input class="rename" data-i="${i}" value="${escapeAttr(row.outBase)}"><span class="muted extlbl" style="font-size:12px"> ${escapeHtml(ext)}</span></td>
@@ -735,7 +751,7 @@ $('resTbl').addEventListener('click', e=>{
   const sw=e.target.closest('.swap');
   if(sw){ const i=+sw.dataset.i, row=state.results[i]; row.chosenIdx=(row.chosenIdx+1)%row.candidates.length;
     const cand=row.candidates[row.chosenIdx]; const tr=sw.closest('tr');
-    tr.querySelector('img.thumb').src='/api/file?id='+cand.id;
+    tr.querySelector('img.thumb').src=imgUrl(cand);
     const el=tr.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
     sw.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
     if(state.previewIdx===i) showPreview(i);
@@ -749,7 +765,7 @@ function showPreview(i){
   const row=state.results[i]; if(!row||row.type!=='found') return;
   const cand=row.candidates[row.chosenIdx];
   state.previewIdx=i;
-  $('previewImg').src='/api/file?id='+cand.id;
+  $('previewImg').src=imgUrl(cand);
   $('previewCap').textContent=`${row.name}  —  ${row.chosenIdx+1}/${row.candidates.length}`;
   $('preview').style.display='flex';
 }
@@ -792,6 +808,7 @@ $('gemModel').value = localStorage.getItem('gemModel') || DEFAULT_MODEL;
 $('gemKey').addEventListener('input',  ()=>localStorage.setItem('gemKey',   $('gemKey').value));
 $('gemModel').addEventListener('input',()=>localStorage.setItem('gemModel', $('gemModel').value));
 $('genBtn').addEventListener('click', async ()=>{
+  if(CLOUD){ $('genProgress').innerHTML='التوليد التلقائي بالـ API شغّال في النسخة المحلية بس. هنا استخدم «نسخ + افتح Gemini» وبعدين ارفع الصور من «استورد صور Gemini».'; return; }
   const key=$('gemKey').value.trim();
   if(!key){ $('genProgress').innerHTML='⚠️ حُط مفتاح Gemini API الأول (مجاني من aistudio.google.com).'; return; }
   const model=$('gemModel').value.trim()||DEFAULT_MODEL;
@@ -904,10 +921,12 @@ async function onImpFile(e){
 // resize one image to target KB, save to library under the item name, record it
 async function importOne(item, file){
   const blob = await resizeToKB(file, parseInt($('targetKB').value)||300, true);   // grow small images up to target too
-  const b64=await blobToB64(blob);
-  const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item,ext:'.jpg',b64})}).then(r=>r.json());
-  if(!(res && res.ok)) throw new Error((res&&res.error)||'فشل الحفظ');
   state.imported[item]={blob, ext:'.jpg'};
+  if(!CLOUD){   // local: persist into the library so it matches next time; cloud: session only
+    const b64=await blobToB64(blob);
+    const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item,ext:'.jpg',b64})}).then(r=>r.json());
+    if(!(res && res.ok)) throw new Error((res&&res.error)||'فشل الحفظ');
+  }
   $('impZip').disabled=false; $('combineZip').disabled=false;
   return blob;
 }
@@ -966,7 +985,7 @@ $('combineZip').addEventListener('click', async ()=>{
   $('combineZip').disabled=true; startOp(); const zip=new JSZip(); const used=new Set(); let k=0; const total=found.length+imp.length;
   for(const row of found){ if(state.cancel) break; const cand=row.candidates[row.chosenIdx];
     $('impProgress').textContent=`بجمّع الكل... ${++k}/${total}`;
-    const raw=await fetch('/api/file?id='+cand.id,{cache:'no-store'}).then(r=>r.blob());
+    const raw=await fetch(imgUrl(cand),{cache:'no-store'}).then(r=>r.blob());
     const {blob,ext}=await maybeResize(raw, cand.name);
     let n=sanitizeFile(row.outBase)+ext; if(used.has(n))n=uniqueName(used,n); used.add(n); zip.file(n,blob); }
   for(const it of imp){ if(state.cancel) break; const e=state.imported[it]; let n=sanitizeFile(it)+e.ext; if(used.has(n))n=uniqueName(used,n); used.add(n);
@@ -1007,31 +1026,39 @@ function findFixed(name){
   const norm=normalizeName(name); const toks=new Set(norm.split(' ').filter(Boolean)); const out=[];
   for(const fx of (state.fixed||[])){
     const hit=(fx.keywords||[]).some(k=>{ const nk=normalizeName(k); return nk && (toks.has(nk) || norm.includes(nk)); });
-    if(hit){ const id=fixedResolve(fx.file); if(id!=null) out.push({id, name:fx.file, fixed:true}); }
+    if(!hit) continue;
+    if(fx.dataUrl) out.push({url:fx.dataUrl, name:'(ثابتة)', fixed:true});
+    else { const id=fixedResolve(fx.file); if(id!=null) out.push({id, name:fx.file, fixed:true}); }
   }
   return out;
 }
+function fixedSrc(fx){ if(fx.dataUrl) return fx.dataUrl; const id=fixedResolve(fx.file); return id!=null?imgUrl({id}):null; }
 function renderFixed(){
   const box=$('fxList'); if(!box) return;
   box.innerHTML=(state.fixed||[]).map((fx,i)=>{
-    const id=fixedResolve(fx.file);
-    const img=id!=null?`<img class="thumb" src="/api/file?id=${id}">`:'<span class="muted" style="font-size:11px">(مش متحمّلة)</span>';
+    const src=fixedSrc(fx);
+    const img=src?`<img class="thumb" src="${src}">`:'<span class="muted" style="font-size:11px">(مش متحمّلة)</span>';
     return `<div style="text-align:center;border:1px solid var(--line);border-radius:9px;padding:6px">${img}<br><span class="muted" style="font-size:11px">${escapeHtml((fx.keywords||[]).join(', '))}</span><br><button class="fxDel" data-i="${i}" style="font-size:11px;padding:3px 8px;margin-top:3px;background:var(--soft);border:1px solid var(--line);color:var(--txt)">حذف</button></div>`;
   }).join('');
 }
+function blobToDataUrl(blob){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); }); }
 $('fxAdd').addEventListener('click', async ()=>{
   const kw=$('fxKeywords').value.split(/[,،]/).map(s=>s.trim()).filter(Boolean);
   const file=$('fxFile').files[0];
   if(!kw.length || !file){ $('fxProgress').textContent='حُط كلمات مفتاحية وصورة الأول.'; return; }
   $('fxProgress').textContent='بحفظ...';
   try{
-    const blob=await resizeToKB(file, 300, true); const b64=await blobToB64(blob);
-    const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:kw[0], ext:'.jpg', b64, folder:'_fixed'})}).then(r=>r.json());
-    if(!(res&&res.ok)) throw new Error((res&&res.error)||'فشل');
-    state.fixed=(state.fixed||[]).filter(x=>x.file!==res.file);
-    state.fixed.push({keywords:kw, file:res.file}); saveFixed();
+    const blob=await resizeToKB(file, 300, true);
+    const key=kw.join(',').toLowerCase();
+    state.fixed=(state.fixed||[]).filter(x=>(x.keywords||[]).join(',').toLowerCase()!==key);
+    if(CLOUD){
+      state.fixed.push({keywords:kw, dataUrl:await blobToDataUrl(blob)}); saveFixed(); renderFixed();
+    } else {
+      const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:kw[0], ext:'.jpg', b64:await blobToB64(blob), folder:'_fixed'})}).then(r=>r.json());
+      if(!(res&&res.ok)) throw new Error((res&&res.error)||'فشل');
+      state.fixed.push({keywords:kw, file:res.file}); saveFixed(); await loadLibrary(); renderFixed();
+    }
     $('fxKeywords').value=''; $('fxFile').value='';
-    await loadLibrary(); renderFixed();
     $('fxProgress').textContent=`✅ اتحفظت لـ: ${kw.join(', ')}`;
   }catch(err){ $('fxProgress').textContent='فشل: '+err.message; }
 });
@@ -1078,13 +1105,13 @@ function renderSuggestions(){
         </span>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">`;
-    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; html+=`<div style="text-align:center"><img class="thumb clk2" data-id="${it.id}" style="width:84px;height:84px" src="/api/file?id=${it.id}"><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
+    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; html+=`<div style="text-align:center"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}"><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
     html+=`</div></div>`;
   });
   box.innerHTML=html;
 }
 $('suggestList').addEventListener('click', e=>{
-  const img=e.target.closest('.clk2'); if(img){ const id=img.dataset.id; $('previewImg').src='/api/file?id='+id; $('previewCap').textContent='معاينة'; $('preview').style.display='flex'; return; }
+  const img=e.target.closest('.clk2'); if(img){ $('previewImg').src=img.src; $('previewCap').textContent='معاينة'; $('preview').style.display='flex'; return; }
   const dz=e.target.closest('.dismissSug'); if(dz){ (state.dismissed||(state.dismissed=new Set())).add(dz.dataset.name); renderSuggestions(); return; }
   const btn=e.target.closest('.acceptSug'); if(!btn) return;
   const b=state.suggestBlocks[+btn.dataset.b]; const cand=b.sugg[+btn.dataset.s];
@@ -1099,11 +1126,14 @@ async function useOwnImage(name, file){
   try{
     $('suggestProgress').textContent='بجهّز صورتك...';
     await importOne(name, file);
-    await loadLibrary();
-    const saved=sanitizeFile(name)+'.jpg';
-    const it=(state.rawList||[]).find(x=>x.name===saved);
-    if(it) acceptSuggestion(name, {id:it.id, name:saved});
-    else refreshMissingUI();
+    if(CLOUD){
+      acceptSuggestion(name, {url:URL.createObjectURL(state.imported[name].blob), name});
+    } else {
+      await loadLibrary();
+      const saved=sanitizeFile(name)+'.jpg';
+      const it=(state.rawList||[]).find(x=>x.name===saved);
+      if(it) acceptSuggestion(name, {id:it.id, name:saved}); else refreshMissingUI();
+    }
     $('suggestProgress').textContent='✅ اتحطت صورتك للصنف: '+name;
   }catch(err){ $('suggestProgress').textContent='فشل: '+err.message; }
 }
@@ -1168,7 +1198,7 @@ $('dlZip').addEventListener('click', async ()=>{
     if(state.cancel) break;
     const row=found[k]; const cand=row.candidates[row.chosenIdx];
     log(`بجهّز الـ ZIP... ${k+1}/${found.length}`);
-    const raw=await fetch('/api/file?id='+cand.id,{cache:'no-store'}).then(r=>r.blob());
+    const raw=await fetch(imgUrl(cand),{cache:'no-store'}).then(r=>r.blob());
     const {blob,ext}=await maybeResize(raw, cand.name);
     let nm=sanitizeFile(row.outBase)+ext; if(used.has(nm)) nm=uniqueName(used,nm); used.add(nm);
     zip.file(nm, blob); n++;
