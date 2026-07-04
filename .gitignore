@@ -1,0 +1,13 @@
+# the image library is huge (GBs) and machine-specific — never commit it
+images/
+images_dir.txt
+
+# runtime / test artifacts
+_*
+*.extracted
+.claude/
+*.log
+
+# OS junk
+Thumbs.db
+.DS_Store

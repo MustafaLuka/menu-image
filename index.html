@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مطابقة صور المنيو — Menu Image Matcher</title>
+<script src="libs/exceljs.min.js"></script>
+<script src="libs/jszip.min.js"></script>
+<script src="libs/pdf.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1720; --card:#161f2b; --line:#24303f; --txt:#e7eef7; --muted:#9fb0c3;
+    --accent:#ff5a1f; --accent2:#1f9d55; --green:#1f9d55; --red:#e0322f; --soft:#1d2733;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt);line-height:1.6}
+  header{background:linear-gradient(135deg,#ff5a1f,#ff8a3d);padding:22px 20px;color:#fff}
+  header h1{margin:0;font-size:22px}
+  header p{margin:4px 0 0;opacity:.95;font-size:14px}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:16px 0}
+  .step-no{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;margin-left:8px}
+  h2{font-size:17px;margin:0 0 12px;display:flex;align-items:center}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input[type=file],select,input[type=number],input[type=text],textarea{
+    width:100%;background:var(--soft);border:1px solid var(--line);color:var(--txt);
+    border-radius:9px;padding:10px;font-size:14px;font-family:inherit
+  }
+  textarea{resize:vertical;line-height:1.5}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:200px}
+  .checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .checks label{display:flex;align-items:center;gap:6px;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:8px 12px;margin:0;color:var(--txt);font-size:13.5px;cursor:pointer}
+  .checks label.on{border-color:var(--accent);background:rgba(255,90,31,.12)}
+  .checks input{width:auto;margin:0}
+  .lang-badge{font-size:11px;padding:1px 7px;border-radius:20px;font-weight:700}
+  .lang-ar{background:rgba(31,157,85,.18);color:#5fdd97}
+  .lang-en{background:rgba(64,128,255,.18);color:#86b0ff}
+  .thumb{width:46px;height:46px;object-fit:cover;border-radius:6px;background:var(--soft);border:1px solid var(--line)}
+  .thumb.clk{cursor:zoom-in}
+  #impList .thumb{cursor:default}
+  input.rename{width:170px;padding:6px 8px;font-size:13px}
+  button.swap{background:var(--soft);border:1px solid var(--line);color:var(--txt);padding:6px 10px;font-size:12.5px;font-weight:600}
+  #preview{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50}
+  #preview .pv-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;gap:8px}
+  #preview .pv-head{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
+  #preview #previewClose{background:var(--soft);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 10px;font-size:14px}
+  #preview img{max-width:78vw;max-height:74vh;object-fit:contain;border-radius:10px;background:#fff}
+  button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 22px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:var(--soft);border:1px solid var(--line)}
+  .hint{font-size:12.5px;color:var(--muted)}
+  .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12.5px;font-weight:700}
+  .ok{background:rgba(31,157,85,.18);color:#5fdd97;border:1px solid rgba(31,157,85,.4)}
+  .no{background:rgba(224,50,47,.16);color:#ff8a87;border:1px solid rgba(224,50,47,.4)}
+  .stat{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}
+  .stat .box{flex:1;min-width:130px;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:12px;text-align:center}
+  .stat .box b{display:block;font-size:26px}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--card)}
+  .tbl-wrap{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  tr.found td:first-child{border-right:4px solid var(--green)}
+  tr.miss td:first-child{border-right:4px solid var(--red)}
+  .dl{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+  .muted{color:var(--muted)}
+  .preview td,.preview th{white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+  #log{font-size:12.5px;color:var(--muted);margin-top:8px;min-height:18px}
+  .badge{font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:2px 8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍽️ مطابقة صور المنيو</h1>
+  <p>ارفع شيت المنيو، حدّد فولدر الصور، والتطبيق هيلوّن الأصناف اللي لاقي لها صور ويجمّعها في ملف ZIP.</p>
+</header>
+
+<div class="wrap">
+
+  <!-- STEP 1: image library (from local backend) -->
+  <div class="card">
+    <h2><span class="step-no">1</span> مكتبة الصور</h2>
+    <div id="imgInfo" class="hint">⏳ بحمّل مكتبة الصور من الباك إند المحلي...</div>
+    <button id="refreshImgs" class="ghost" style="margin-top:10px">🔄 تحديث المكتبة</button>
+
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:10px">
+      <label>🏷️ صور ثابتة للتصنيفات (احتياطية في الاقتراحات)</label>
+      <div class="hint">حُط كلمات مفتاحية + صورة. أي صنف ناقص فيه الكلمة دي هتظهر له الصورة دي في الاقتراحات. (بتتحفظ بشكل دائم)</div>
+      <div class="row" style="align-items:flex-end;margin-top:6px">
+        <div><label>كلمات مفتاحية (بفاصلة)</label><input type="text" id="fxKeywords" placeholder="roll, رول"></div>
+        <div><label>الصورة</label><input type="file" id="fxFile" accept="image/*"></div>
+        <div style="flex:0 0 auto"><button id="fxAdd">➕ أضف</button></div>
+      </div>
+      <div id="fxProgress" class="hint" style="margin-top:4px"></div>
+      <div id="fxList" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: menu -->
+  <div class="card">
+    <h2><span class="step-no">2</span> المنيو</h2>
+    <label>طريقة إدخال المنيو:</label>
+    <div class="checks" id="srcTabs">
+      <label class="on"><input type="radio" name="src" value="file" checked> 📄 ملف Excel</label>
+      <label><input type="radio" name="src" value="paste"> 📝 لصق كتابة</label>
+      <label><input type="radio" name="src" value="pdf"> 📕 PDF</label>
+    </div>
+
+    <div id="srcFile" style="margin-top:10px">
+      <label>ارفع ملف المنيو (.xlsx)</label>
+      <input type="file" id="menuFile" accept=".xlsx,.xlsm" />
+    </div>
+
+    <div id="srcPaste" style="display:none;margin-top:10px">
+      <label>الصق أسماء الأصناف (سطر لكل صنف) — هطلّع اسم الصنف بس وأتجاهل السعر/الأرقام الزيادة:</label>
+      <textarea id="pasteText" rows="6" placeholder="مثال:&#10;1. كريب بطاطس .......... 80&#10;شاورما فراخ سوري 95 جنيه&#10;Chicken Burger - 70 EGP"></textarea>
+      <button id="usePaste" style="margin-top:8px">استخدم النص ده</button>
+    </div>
+
+    <div id="srcPdf" style="display:none;margin-top:10px">
+      <label>ارفع ملف PDF (لازم يكون نص، مش صورة) — هطلّع السطور وتقدر تعدّلها قبل المطابقة:</label>
+      <input type="file" id="pdfFile" accept=".pdf,application/pdf" />
+      <div id="pdfProgress" class="hint" style="margin-top:4px"></div>
+    </div>
+
+    <div class="hint" id="optsIntro" style="display:none;margin-top:8px">التطبيق بيحاول يظبط الخانات دي لوحده — غيّرها بس لو فيه حاجة غلط 👇</div>
+    <div class="row" id="opts" style="display:none">
+      <div>
+        <label>📄 صفحة المنيو</label>
+        <select id="sheetSel"></select>
+        <div class="hint">اختار الشيت اللي فيه المنيو</div>
+      </div>
+      <div>
+        <label>🔢 صف العناوين</label>
+        <input type="number" id="headerRow" value="1" min="1" />
+        <div class="hint">الصف اللي فيه أسماء الأعمدة (غالبًا 1)</div>
+      </div>
+      <div>
+        <label>🍽️ عمود اسم الصنف</label>
+        <select id="colSel"></select>
+        <div class="hint">العمود اللي فيه أسماء الأكلات</div>
+      </div>
+      <div>
+        <label>🌐 عمود لغة تانية (اختياري)</label>
+        <select id="colSel2"></select>
+        <div class="hint">لو الصنف مش لاقيه بلغة، يجرّب اللغة دي</div>
+      </div>
+    </div>
+    <div id="detectInfo" class="hint" style="margin-top:8px"></div>
+    <div id="previewWrap" class="tbl-wrap preview" style="display:none;margin-top:12px"></div>
+  </div>
+
+  <!-- STEP 3: run -->
+  <div class="card">
+    <h2><span class="step-no">3</span> طابِق وكوّن النتيجة</h2>
+    <div class="row" style="align-items:center">
+      <div style="flex:0 0 auto;display:flex;gap:8px">
+        <button id="runBtn" disabled>🔍 طابِق دلوقتي</button>
+        <button id="stopBtn" style="display:none;background:var(--red)">⏹️ إيقاف</button>
+      </div>
+      <div>
+        <label style="margin-top:0">
+          <input type="checkbox" id="fuzzy" checked style="width:auto;margin-left:6px" />
+          مطابقة مرنة (تجاهل المسافات والشرطات والاختلافات البسيطة)
+        </label>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <label>مرادفات / كلمات بنفس المعنى (كل سطر مجموعة، الأول هو الأساسي). بتتحفظ تلقائيًا.</label>
+      <textarea id="synonyms" rows="4" placeholder="dal, daal&#10;shake, milkshake&#10;ice, iced, cold"></textarea>
+      <div class="hint">مثال: <code>shake, milkshake</code> يعني «milkshake» = «shake». وكمان ترتيب الكلمات مايفرقش (small water = water small).</div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="card" id="resultCard" style="display:none">
+    <h2>📊 النتيجة</h2>
+    <div class="stat">
+      <div class="box"><b id="cTotal">0</b><span class="muted">إجمالي الأصناف</span></div>
+      <div class="box"><b id="cFound" style="color:var(--green)">0</b><span class="muted">لاقي لها صور</span></div>
+      <div class="box"><b id="cMiss" style="color:var(--red)">0</b><span class="muted">مش موجودة</span></div>
+      <div class="box"><b id="cImgs">0</b><span class="muted">صور في الـ ZIP</span></div>
+      <div class="box"><b id="cReorder" style="color:var(--accent)">0</b><span class="muted">اتظبط بإعادة الترتيب</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:4px 0 10px">
+      <label style="margin:0;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="resizeOn" checked style="width:auto"> ضغط كل الصور عند التحميل
+      </label>
+      <label style="margin:0;display:flex;align-items:center;gap:6px">لحجم <input type="number" id="targetKB" value="300" min="50" style="width:90px"> KB</label>
+    </div>
+    <div class="dl">
+      <button id="dlXlsx" class="ghost">⬇️ تحميل الشيت الملوّن (.xlsx)</button>
+      <button id="dlZip" class="ghost">⬇️ تحميل صور المطابقة (.zip)</button>
+    </div>
+    <div class="tbl-wrap" style="margin-top:14px">
+      <table id="resTbl"><thead><tr><th>صورة</th><th>اسم الصنف</th><th>الحالة</th><th>اسم الملف في الـ ZIP (للتعديل)</th><th>بدّل</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <!-- Gemini prompt for missing items -->
+    <div id="gemBox" style="display:none;margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <h3 style="margin:0 0 4px;font-size:15px">✨ الأصناف الناقصة → برومت Gemini</h3>
+      <div class="hint">التطبيق جمّع كل الأصناف اللي ملقاش لها صور في برومت واحد. عدّل النص لو عايز (بيتحفظ تلقائيًا)، وبعدين انسخه أو افتح Gemini والصقه.</div>
+      <label>تعليمات البرومت:</label>
+      <textarea id="gemHeader" rows="3"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+        <button id="gemPrev" class="ghost" style="padding:6px 12px">‹ السابق</button>
+        <b id="gemBatchLbl"></b>
+        <button id="gemNext" class="ghost" style="padding:6px 12px">التالي ›</button>
+      </div>
+      <label>البرومت النهائي (ده اللي هيتنسخ — كل مرة ١٠ أصناف بس):</label>
+      <textarea id="gemPrompt" rows="7" readonly></textarea>
+      <div class="dl">
+        <button id="copyGem" class="ghost">📋 نسخ البرومت</button>
+        <button id="openGem" class="ghost">🌐 نسخ + افتح Gemini</button>
+      </div>
+
+      <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+        <label>أو ولّد الصور تلقائيًا بـ Gemini API — هتتحفظ عندك في فولدر <b>images/_generated</b> وتدخل المكتبة:</label>
+        <div class="row">
+          <div>
+            <label>مفتاح Gemini API <span class="muted">(بيتحفظ محليًا عندك بس)</span></label>
+            <input type="password" id="gemKey" placeholder="الصق المفتاح من aistudio.google.com" />
+          </div>
+          <div>
+            <label>الموديل</label>
+            <input type="text" id="gemModel" />
+          </div>
+        </div>
+        <div class="hint" style="margin-top:4px">لو الموديل ده مش شغّال عندك، جرّب: <code>gemini-2.0-flash-preview-image-generation</code></div>
+        <button id="genBtn" style="margin-top:10px">🪄 ولّد الصور الناقصة دلوقتي</button>
+        <div id="genProgress" class="hint" style="margin-top:8px"></div>
+        <div id="genList" class="tbl-wrap" style="display:none;max-height:220px;margin-top:8px"></div>
+      </div>
+
+      <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+        <label>📥 استورد صور Gemini: سمّيها باسم الصنف، اضغطها، ضيفها للمكتبة، واجمعها مع الموجود.</label>
+        <div style="margin-top:6px">
+          <label>📦 ارفعهم كلهم مرة واحدة (صور متعددة أو ملف ZIP)</label>
+          <input type="file" id="bulkFiles" accept="image/*,.zip,application/zip" multiple>
+          <div class="hint">هيتعملهم رسايز (للحجم اللي فوق)، وييتسمّوا تلقائيًا بمطابقة اسم الملف بأسماء الناقص.</div>
+        </div>
+        <div id="bulkProgress" class="hint" style="margin-top:4px"></div>
+        <label style="margin-top:10px">أو صورة لكل صنف على حدة:</label>
+        <div id="impList" class="tbl-wrap" style="display:none;max-height:320px;margin-top:8px"></div>
+        <div class="dl" style="margin-top:8px">
+          <button id="impZip" class="ghost" disabled>⬇️ نزّل الصور المستوردة (ZIP)</button>
+          <button id="combineZip" disabled>⬇️ نزّل الكل (موجودة + مستوردة) ZIP</button>
+        </div>
+        <div id="impProgress" class="hint"></div>
+      </div>
+
+      <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+        <label>🤖 اقتراحات ذكية: التطبيق يدوّر في المكتبة عن صور ممكن تكون لنفس الأصناف الناقصة (تطابق تقريبي). مفيش حاجة بتتضاف غير لما تدوس «أضيفها».</label>
+        <button id="suggestBtn" style="margin-top:8px">🤖 اقترحلي صور للناقص</button>
+        <div id="suggestProgress" class="hint" style="margin-top:6px"></div>
+        <div id="suggestList" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- standalone image resizer -->
+  <div class="card">
+    <h2>🛠️ أداة تغيير حجم الصور (مستقلة)</h2>
+    <div class="hint">ارفع أي صور واختار الحجم — التطبيق يظبّطهم كلهم على الحجم ده (تكبير أو تصغير) وينزّلهم ZIP. مستقلة تمامًا عن المنيو.</div>
+    <div class="row" style="align-items:flex-end;margin-top:8px">
+      <div><label>الصور</label><input type="file" id="rsFiles" accept="image/*" multiple></div>
+      <div style="flex:0 0 auto"><label>الحجم المطلوب (KB)</label><input type="number" id="rsKB" value="300" min="20" style="width:110px"></div>
+      <div style="flex:0 0 auto"><button id="rsBtn">🛠️ غيّر الحجم ونزّل</button></div>
+    </div>
+    <div id="rsProgress" class="hint" style="margin-top:6px"></div>
+  </div>
+
+  <p class="hint" style="text-align:center">يشتغل كله في المتصفح — مفيش أي بيانات بتطلع لأي سيرفر. 🔒</p>
+</div>
+
+<!-- enlarged image preview (shown when a thumbnail is clicked) -->
+<div id="preview" style="display:none">
+  <div class="pv-card">
+    <div class="pv-head"><span id="previewCap"></span><button id="previewClose">✕</button></div>
+    <img id="previewImg" src="" alt="">
+  </div>
+</div>
+
+<script>
+// ===================== Arabic/English name normalization =====================
+function baseNormalize(s){
+  if(s===null||s===undefined) return '';
+  let t = String(s).trim().toLowerCase();
+  t = t.replace(/[ؐ-ًؚ-ٰٟۖ-ۭ]/g,''); // tashkeel/diacritics
+  t = t.replace(/ـ/g,'');                       // tatweel ـ
+  t = t.replace(/[أإآٱ]/g,'ا'); // أ إ آ ٱ -> ا
+  t = t.replace(/ى/g,'ي');                 // ى -> ي
+  t = t.replace(/ة/g,'ه');                 // ة -> ه
+  t = t.replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ء/g,''); // hamza forms
+  t = t.replace(/[_\-]+/g,' ');                       // underscores/dashes -> space
+  t = t.replace(/[^\p{L}\p{N}\s]/gu,' ');            // drop punctuation
+  t = t.replace(/\s+/g,' ').trim();                  // collapse spaces
+  return t;
+}
+// full normalize = base + synonym substitution per word (dal=daal, shake=milkshake, ...)
+function normalizeName(s){
+  const t = baseNormalize(s);
+  if(!t) return t;
+  return t.split(' ').map(w => SYNONYMS[w] || w).join(' ');
+}
+function tightKey(s){ return normalizeName(s).replace(/\s+/g,''); }
+// word-order-independent key: "small water" and "water small" -> same key
+function sortedKey(s){ const t=normalizeName(s); return t ? t.split(' ').sort().join(' ') : t; }
+function stripExt(name){ return name.replace(/\.[^.]+$/,''); }
+// editable synonym groups: first word in a line is the canonical form
+const DEFAULT_SYNONYMS = 'dal, daal\nshake, milkshake\nice, iced, cold';
+let SYNONYMS = {};
+function buildSynonyms(text){
+  SYNONYMS = {};
+  for(const line of String(text).split('\n')){
+    const words = line.split(/[,،=]/).map(w=>baseNormalize(w)).filter(Boolean);
+    if(words.length<2) continue;
+    for(const w of words) SYNONYMS[w] = words[0];
+  }
+}
+buildSynonyms(localStorage.getItem('synonyms') || DEFAULT_SYNONYMS);
+// language of a name: 'ar' if it has any Arabic letter, else 'en'
+function langOf(s){ return /[؀-ۿݐ-ݿ]/.test(String(s)) ? 'ar' : 'en'; }
+
+// ===================== bilingual food glossary (for cross-language suggestion) =====================
+const GLOSSARY=[
+  ['كريب','crepe'],['حواوشي','hawawshi'],['شاورما','shawarma'],['فراخ','chicken'],['دجاج','chicken'],
+  ['لحمة','beef'],['لحم','meat'],['كفتة','kofta'],['سجق','sausage'],['سوسيس','sausage'],['برجر','burger'],
+  ['بانيه','pane'],['بيتزا','pizza'],['مكرونة','pasta'],['باستا','pasta'],['بطاطس','potato'],['جبنة','cheese'],
+  ['جبن','cheese'],['شيدر','cheddar'],['موتزاريلا','mozzarella'],['مشروم','mushroom'],['رانش','ranch'],
+  ['سلطة','salad'],['شوربة','soup'],['عصير','juice'],['مشروب','drink'],['ميلك شيك','milkshake'],['شيك','shake'],
+  ['قهوة','coffee'],['شاي','tea'],['فطير','pie'],['رول','roll'],['سوري','syrian'],['بلدي','baladi'],
+  ['اسكندراني','alexandrian'],['مشوي','grilled'],['مقلي','fried'],['كرسبي','crispy'],['سبايسي','spicy'],
+  ['حار','spicy'],['مكس','mix'],['ميكس','mix'],['دبل','double'],['نوتيلا','nutella'],['لوتس','lotus'],
+  ['اوريو','oreo'],['شوكولاتة','chocolate'],['موز','banana'],['فراولة','strawberry'],['مانجو','mango'],
+  ['عسل','honey'],['ثوم','garlic'],['طماطم','tomato'],['ساندويتش','sandwich'],['سندوتش','sandwich'],
+  ['وجبة','meal'],['فاهيتا','fajita'],['شيش','shish'],['طاووق','tawook'],['زنجر','zinger'],['ستربس','strips'],
+  ['كبدة','liver'],['ريش','ribs'],['صاروخ','rocket'],['بط','duck'],['سمك','fish'],['جمبري','shrimp']
+];
+const AR2EN={}, EN2AR={};
+GLOSSARY.forEach(([a,e])=>{ const na=baseNormalize(a), ne=baseNormalize(e); if(na) AR2EN[na]=e; if(ne && !(ne in EN2AR)) EN2AR[ne]=a; });
+// translate an item name word-by-word into the other language (returns null if nothing translatable)
+function translateName(name){
+  const lang=langOf(name); const dict = lang==='ar' ? AR2EN : EN2AR;
+  const tr=normalizeName(name).split(' ').map(t=>dict[t]).filter(Boolean);
+  return tr.length ? tr.join(' ') : null;
+}
+
+// ===================== State =====================
+const state = { images:{ normMap:new Map(), tightMap:new Map(), count:0 },
+                workbook:null, sheetName:null, fileName:'menu.xlsx',
+                outBlobXlsx:null, outBlobZip:null };
+
+const $ = id => document.getElementById(id);
+function log(msg){ $('log').textContent = msg; }
+
+// ===================== STEP 1: image library (from backend) =====================
+// Build lookup maps from the cached list. Keys are language-prefixed ('ar|'/'en|')
+// so Arabic names only match Arabic images and English only English.
+function buildImageMaps(){
+  const list = state.rawList || [];
+  const normMap=new Map(), tightMap=new Map(), sortedMap=new Map(); let ar=0, en=0;
+  const add=(map,lang,key,item)=>{ const k=lang+'|'+key; if(!map.has(k)) map.set(k,[]); map.get(k).push(item); };
+  for(const item of list){
+    const base = stripExt(item.name);
+    const lang = langOf(base); if(lang==='ar') ar++; else en++;
+    const norm = normalizeName(base);
+    item._lang = lang; item._toks = norm.split(' ').filter(w=>w.length>=2);  // cached for smart suggestions
+    add(normMap,   lang, norm,            item);
+    add(tightMap,  lang, tightKey(base),  item);
+    add(sortedMap, lang, sortedKey(base), item);
+  }
+  state.images = { normMap, tightMap, sortedMap, count:list.length, ar, en };
+}
+async function loadLibrary(){
+  $('imgInfo').innerHTML = '⏳ بحمّل مكتبة الصور من الباك إند المحلي...';
+  try{
+    const res = await fetch('/api/images', {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const list = await res.json(); // [{id, name}]
+    state.rawList = list;
+    buildImageMaps();
+    const x = state.images;
+    $('imgInfo').innerHTML = list.length
+      ? `✅ المكتبة جاهزة: <b>${list.length}</b> صورة (عربي: ${x.ar} · إنجليزي: ${x.en}).`
+      : '⚠️ المكتبة فاضية — حُط ملف الـ ZIP الكبير (أو الصور) في فولدر <b>images</b> اللي جنب التطبيق، وبعدين دوس «تحديث المكتبة».';
+  }catch(err){
+    state.images = { normMap:new Map(), tightMap:new Map(), sortedMap:new Map(), count:0, ar:0, en:0 };
+    $('imgInfo').innerHTML = '❌ مش لاقي الباك إند. اقفل الصفحة دي وشغّل ملف <b>start.bat</b> — هو اللي هيفتح الصفحة على المنفذ الصح لوحده (متفتحش index.html بالدبل كليك).';
+  }
+  maybeEnableRun();
+  if(typeof renderFixed==='function') renderFixed();   // show fixed-category images once ids resolve
+}
+$('refreshImgs').addEventListener('click', loadLibrary);
+// synonyms editor: rebuild synonyms + library maps when edited
+$('synonyms').value = localStorage.getItem('synonyms') || DEFAULT_SYNONYMS;
+$('synonyms').addEventListener('input', ()=>{
+  localStorage.setItem('synonyms', $('synonyms').value);
+  buildSynonyms($('synonyms').value);
+  if(state.rawList) buildImageMaps();
+});
+loadLibrary();
+
+// ===================== STEP 2: menu excel =====================
+$('menuFile').addEventListener('change', async e=>{
+  const file = e.target.files[0]; if(!file) return;
+  state.fileName = file.name;
+  log('بقرأ ملف المنيو...');
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  state.workbook = wb;
+  const sel = $('sheetSel'); sel.innerHTML='';
+  wb.worksheets.forEach(ws=>{ const o=document.createElement('option'); o.value=ws.name; o.textContent=ws.name; sel.appendChild(o); });
+  $('opts').style.display='flex'; $('optsIntro').style.display='block';
+  rebuildColumns(); log('');
+});
+$('sheetSel').addEventListener('change', rebuildColumns);
+$('headerRow').addEventListener('change', rebuildColumns);
+$('colSel').addEventListener('change', renderPreview);
+
+// ----- menu source tabs (Excel / paste text / PDF) -----
+document.querySelectorAll('#srcTabs input[name=src]').forEach(r=>r.addEventListener('change', e=>{
+  document.querySelectorAll('#srcTabs label').forEach(l=>l.classList.remove('on'));
+  e.target.closest('label').classList.add('on');
+  const v=e.target.value;
+  $('srcFile').style.display = v==='file'?'block':'none';
+  $('srcPaste').style.display= v==='paste'?'block':'none';
+  $('srcPdf').style.display  = v==='pdf'?'block':'none';
+}));
+
+// extract the item name from a free-text line: drop list markers + trailing price/numbers
+function cleanMenuLine(line){
+  let s=String(line).replace(/ /g,' ').trim();
+  if(!s) return '';
+  s=s.replace(/^\s*(\d{1,3}[\.\)]\s+|[-–—•*·▪◦]\s+)/,'');                       // "1. " / "- " markers
+  s=s.replace(/[\s.…\-–—|:]*\d+([.,]\d+)?\s*(egp|le|pounds?|جنيه|ج\.?\s?م\.?|جم|ر\.?\s?س|sar|aed|درهم|ريال|kwd|د\.?\s?ك)?\.?\s*$/i,''); // trailing price
+  s=s.replace(/[\s.…\-–—|:]+$/,'');                                          // leftover trailing leaders
+  return s.replace(/\s+/g,' ').trim();
+}
+function parseMenuText(text){
+  return String(text).split(/\r?\n/).map(cleanMenuLine).filter(n=>n && !/^\d+$/.test(n));
+}
+// build a 1-column in-memory workbook from a list of names, then reuse the whole pipeline
+async function useNames(names){
+  if(!names.length){ log('مفيش أسماء في النص.'); return; }
+  const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet('Menu');
+  ws.addRow(['اسم الصنف']); names.forEach(n=>ws.addRow([n]));
+  state.workbook=wb; state.fileName='menu.xlsx';
+  const sel=$('sheetSel'); sel.innerHTML=''; const o=document.createElement('option'); o.value='Menu'; o.textContent='Menu'; sel.appendChild(o);
+  $('headerRow').value=1;
+  $('opts').style.display='flex'; $('optsIntro').style.display='block';
+  rebuildColumns(); log(`جاهز: ${names.length} صنف. دوس «طابِق دلوقتي».`);
+}
+$('usePaste').addEventListener('click', ()=> useNames(parseMenuText($('pasteText').value)));
+
+// ----- PDF (text-based): extract lines into the paste box for review -----
+if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc='libs/pdf.worker.min.js'; }
+$('pdfFile').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  if(!window.pdfjsLib){ $('pdfProgress').textContent='مكتبة PDF مش متحمّلة.'; return; }
+  $('pdfProgress').textContent='بقرأ الـ PDF...';
+  try{
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    const lines=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p); const tc=await page.getTextContent();
+      const rows={};
+      tc.items.forEach(it=>{ if(!it.str) return; const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push(it); });
+      Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+        const txt=rows[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
+        if(txt) lines.push(txt);
+      });
+    }
+    if(!lines.length){ $('pdfProgress').innerHTML='⚠️ مفيش نص في الـ PDF — غالبًا صورة. (هنحتاج OCR).'; return; }
+    $('pasteText').value=lines.join('\n');
+    document.querySelector('#srcTabs input[value=paste]').click();   // show text for review
+    $('pdfProgress').textContent='';
+    log(`اتطلّع ${lines.length} سطر من الـ PDF — راجعهم في خانة اللصق وامسح أي سطور مش أصناف، وبعدين «استخدم النص ده».`);
+  }catch(err){ $('pdfProgress').textContent='مش قادر أقرأ الـ PDF: '+err.message; }
+});
+
+function currentSheet(){ return state.workbook ? state.workbook.getWorksheet($('sheetSel').value) : null; }
+
+function rebuildColumns(){
+  const ws = currentSheet(); if(!ws) return;
+  const hr = Math.max(1, parseInt($('headerRow').value)||1);
+  const headerRow = ws.getRow(hr);
+  const colSel = $('colSel'), colSel2 = $('colSel2');
+  colSel.innerHTML=''; colSel2.innerHTML='<option value="">(بدون)</option>';
+  const cols=[];
+  headerRow.eachCell({includeEmpty:false},(cell,col)=>{
+    const label = (cell.value===null||cell.value===undefined)?`عمود ${col}`:String(cell.value);
+    cols.push({col, label, sc:score(label), lang:sampleLang(col)});
+    const o=document.createElement('option'); o.value=col; o.textContent=`${label}  (عمود ${col})`; colSel.appendChild(o);
+    const o2=document.createElement('option'); o2.value=col; o2.textContent=`${label}  (عمود ${col})`; colSel2.appendChild(o2);
+  });
+  // primary = highest-scoring name column
+  let primary=null, bestScore=-1;
+  for(const c of cols){ if(c.sc>bestScore){ bestScore=c.sc; primary=c; } }
+  if(primary) colSel.value=primary.col;
+  // secondary (fallback) = another name column, in a different language if possible
+  if(primary){
+    const cand = cols.filter(c=>c.col!==primary.col && c.sc>=8);
+    const other = cand.find(c=>c.lang && primary.lang && c.lang!==primary.lang) || null;
+    colSel2.value = other ? String(other.col) : '';
+  }
+  // friendly summary of what was auto-detected
+  const sec = cols.find(c=>/section|category|قسم|تصنيف|فئة/i.test(c.label) && !/\bid\b|كود/i.test(c.label));
+  let info = primary ? `✅ هحاول أطابق على عمود <b>${escapeHtml(primary.label)}</b>.` : '⚠️ اختر عمود اسم الصنف.';
+  if(colSel2.value){ const o=cols.find(c=>String(c.col)===colSel2.value); if(o) info+=` ولو مش لاقي، هجرّب <b>${escapeHtml(o.label)}</b>.`; }
+  if(sec) info += ` وهضيف القسم «<b>${escapeHtml(sec.label)}</b>» جنب الاسم في برومت Gemini.`;
+  $('detectInfo').innerHTML = info;
+  renderPreview();
+
+  function score(label){
+    // avoid section/category/id columns; strongly prefer item-name columns
+    if(/section|category|قسم|تصنيف|\bid\b|كود|price|سعر|sort|ترتيب|وصف|description/i.test(label)) return -5;
+    if(/name\s*\(|اسم العنصر|item\s*name|اسم المنتج|اسم الصنف|product\s*name/i.test(label)) return 20;
+    if(/name|اسم|item|product|dish|صنف|منتج|الوجبة|البند/i.test(label)) return 8;
+    return 0;
+  }
+  function sampleLang(col){
+    for(let r=hr+1; r<=Math.min(hr+30, ws.rowCount); r++){
+      const t=cellText(ws.getRow(r).getCell(col).value).trim();
+      if(t) return langOf(t);
+    }
+    return null;
+  }
+}
+
+function renderPreview(){
+  const ws = currentSheet(); if(!ws) return;
+  const hr = Math.max(1, parseInt($('headerRow').value)||1);
+  const selCol = parseInt($('colSel').value);
+  const headerRow = ws.getRow(hr);
+  let html='<table><thead><tr>';
+  const cols=[];
+  headerRow.eachCell({includeEmpty:false},(cell,col)=>{ cols.push(col); const hl=String(cell.value??`عمود ${col}`); html+=`<th>${col===selCol?'➡️ ':''}${escapeHtml(hl)}</th>`; });
+  html+='</tr></thead><tbody>';
+  let shown=0;
+  for(let r=hr+1; r<=ws.rowCount && shown<6; r++){
+    const row=ws.getRow(r); if(row.actualCellCount===0) continue;
+    html+='<tr>'; cols.forEach(c=>{ html+=`<td>${escapeHtml(cellText(row.getCell(c).value))}</td>`; }); html+='</tr>'; shown++;
+  }
+  html+='</tbody></table>';
+  $('previewWrap').style.display='block'; $('previewWrap').innerHTML=html;
+  maybeEnableRun();
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+function cellText(v){
+  if(v===null||v===undefined) return '';
+  if(typeof v==='object'){ if(v.richText) return v.richText.map(t=>t.text).join(''); if(v.text!==undefined) return v.text; if(v.result!==undefined) return v.result; return v.hyperlink||''; }
+  return String(v);
+}
+
+function maybeEnableRun(){
+  $('runBtn').disabled = !(state.workbook && state.images.count>0 && $('colSel').value);
+}
+
+// ===================== STEP 3: match & build outputs =====================
+const GREEN='FFC6EFCE', GREEN_TX='FF1B7A43', RED='FFFFC7CE', RED_TX='FF9C0006';
+
+// shared STOP control for long operations (matching / zip / bulk / generation)
+function startOp(msg){ state.cancel=false; $('stopBtn').style.display='inline-block'; if(msg) log(msg); }
+function endOp(){ $('stopBtn').style.display='none'; }
+function endRun(msg){ endOp(); $('runBtn').disabled=false; log(msg); }
+$('stopBtn').addEventListener('click', ()=>{ state.cancel=true; $('stopBtn').disabled=true; log('بوقّف...'); setTimeout(()=>$('stopBtn').disabled=false,500); });
+
+$('runBtn').addEventListener('click', async ()=>{
+  const ws = currentSheet(); if(!ws) return;
+  $('runBtn').disabled=true; startOp('بطابق...');
+  const hr = Math.max(1, parseInt($('headerRow').value)||1);
+  const col = parseInt($('colSel').value);
+  const col2 = $('colSel2').value ? parseInt($('colSel2').value) : 0;  // optional other-language fallback
+  const useFuzzy = $('fuzzy').checked;
+  // detect a section/category column (used to enrich the Gemini prompt) — skip ID columns
+  let sectionCol = 0;
+  ws.getRow(hr).eachCell({includeEmpty:false},(c,ci)=>{
+    const h=String(c.value||'');
+    if(!sectionCol && /section|category|قسم|تصنيف|فئة/i.test(h) && !/\bid\b|كود/i.test(h)) sectionCol=ci;
+  });
+
+  // Build a FRESH output workbook (copy the menu values) instead of rewriting the
+  // original file. Round-tripping the original through ExcelJS makes Excel flag it as
+  // "needs repair"; a freshly-built workbook + colors opens cleanly.
+  const outWb = new ExcelJS.Workbook();
+  const outWs = outWb.addWorksheet((ws.name||'Menu').replace(/[\\/?*\[\]:]/g,' ').substring(0,31));
+  for(let r=1; r<=ws.rowCount; r++){
+    const src=ws.getRow(r); const dst=outWs.getRow(r);
+    src.eachCell({includeEmpty:false},(cell,c)=>{
+      let v=cell.value;
+      if(v && typeof v==='object') v=cellText(v);   // flatten richtext/formula/hyperlink to text
+      dst.getCell(c).value = v;
+    });
+  }
+  // result columns at the end
+  const statusCol = ws.columnCount+1;
+  const fileCol   = ws.columnCount+2;
+  setCell(outWs, hr, statusCol, 'حالة الصورة', true);
+  setCell(outWs, hr, fileCol,   'اسم ملف الصورة', true);
+
+  let found=0, miss=0, reorderedCount=0; const usedNames=new Set();
+  state.results=[];
+
+  for(let r=hr+1; r<=ws.rowCount; r++){
+    if(state.cancel) break;                 // STOP button pressed
+    const row=ws.getRow(r); if(row.actualCellCount===0) continue;
+    const name=cellText(row.getCell(col).value).trim();
+    if(!name) continue;
+    const outRow=outWs.getRow(r);
+    const nameCell=outRow.getCell(col);     // color on the fresh sheet
+
+    let res = lookup(name, useFuzzy);
+    let matchedCell = nameCell, viaFallback = false;
+    // exception: if not found in its own language, try the other-language column
+    if(!res.list.length && col2){
+      const name2=cellText(row.getCell(col2).value).trim();
+      if(name2){ const r2=lookup(name2, useFuzzy); if(r2.list.length){ res=r2; matchedCell=outRow.getCell(col2); viaFallback=true; } }
+    }
+
+    if(res.list.length){
+      found++;
+      const reordered = res.tier==='sorted';   // matched only after ignoring word order
+      if(reordered) reorderedCount++;
+      // default output filename = item name, kept unique
+      let outBase = sanitizeFile(name); let key=outBase.toLowerCase();
+      if(usedNames.has(key)){ let n=2; while(usedNames.has(key+' ('+n+')')) n++; outBase=outBase+' ('+n+')'; key=outBase.toLowerCase(); }
+      usedNames.add(key);
+      const m = res.list[0];
+      const ext = (m.name.match(/\.[^.]+$/)||['.jpg'])[0];
+      // green = image found (this is the deliverable; NOT affected by later rename/swap)
+      paint(nameCell, GREEN, GREEN_TX);
+      if(viaFallback && matchedCell!==nameCell) paint(matchedCell, GREEN, GREEN_TX);
+      const sc=outRow.getCell(statusCol);
+      sc.value = (viaFallback?'موجودة (لغة تانية)':'موجودة') + (reordered?' (أعيد الترتيب)':'');
+      paint(sc, GREEN, GREEN_TX);
+      const fc=outRow.getCell(fileCol); fc.value=outBase+ext; paint(fc, GREEN, GREEN_TX);
+      // candidates = every library image matching this item (for the "swap" option)
+      state.results.push({type:'found', name, candidates:res.list, chosenIdx:0, outBase, fallback:viaFallback, reordered, row:r});
+    } else {
+      miss++;
+      paint(nameCell, RED, RED_TX);   // red = no image
+      const sc=outRow.getCell(statusCol); sc.value='غير موجودة'; paint(sc, RED, RED_TX);
+      const fc=outRow.getCell(fileCol); fc.value='—'; paint(fc, RED, RED_TX);
+      state.results.push({type:'miss', name, row:r,
+        section: sectionCol ? cellText(row.getCell(sectionCol).value).trim() : '',
+        alt: col2 ? cellText(row.getCell(col2).value).trim() : ''});   // other-language name (for the 5th suggestion)
+    }
+  }
+
+  // keep refs so the sheet can be re-colored at download time (after you accept suggestions / import)
+  state.outWb=outWb; state.outWs=outWs; state.col=col; state.statusCol=statusCol; state.fileCol=fileCol;
+  log('بجهّز الشيت...');
+  state.outBlobXlsx = await buildSheetBlob();
+
+  // dashboard + results table (images fetched lazily as thumbnails / at ZIP download)
+  $('cTotal').textContent=found+miss; $('cFound').textContent=found; $('cMiss').textContent=miss;
+  $('cImgs').textContent=found; $('cReorder').textContent=reorderedCount;
+  renderResults();
+
+  // missing-items Gemini prompt + import (state.results is the single source of truth)
+  state.imported = {};
+  state.suggestBlocks = [];
+  $('suggestList').innerHTML=''; $('suggestProgress').textContent='';
+  refreshMissingUI();
+  $('impZip').disabled = true; $('combineZip').disabled = found===0; $('impProgress').textContent='';
+  $('gemBox').style.display = miss>0 ? 'block' : 'none';
+
+  $('dlZip').disabled = found===0;
+  $('resultCard').style.display='block';
+  $('resultCard').scrollIntoView({behavior:'smooth'});
+  endRun(state.cancel ? `اتوقف ⏹️ — اتعالج ${found+miss} صنف لحد ما وقفت.` : `خلصت ✅  — ${found} لاقي لها صور، ${miss} مش موجودة.`);
+});
+// ----- missing-items model (derived from state.results) -----
+function missMiss(){ return (state.results||[]).filter(r=>r.type==='miss'); }
+function pendingMiss(){ return missMiss().filter(r=>!state.imported[r.name]); }   // still need an image
+// (re)colour the output sheet from the CURRENT state — so accepted suggestions / imported
+// items show green, not red. Built fresh every time you download.
+async function buildSheetBlob(){
+  const ws=state.outWs; if(!ws) return state.outBlobXlsx||null;
+  for(const res of (state.results||[])){
+    if(!res.row) continue;
+    const rr=ws.getRow(res.row);
+    const nameC=rr.getCell(state.col), sc=rr.getCell(state.statusCol), fc=rr.getCell(state.fileCol);
+    const hasImg = res.type==='found' || !!(state.imported && state.imported[res.name]);
+    if(hasImg){
+      paint(nameC,GREEN,GREEN_TX);
+      const label = res.type==='found' ? (res.suggested?'موجودة (مقترحة)':(res.fallback?'موجودة (لغة تانية)':'موجودة')) : 'موجودة (مرفوعة)';
+      sc.value=label; paint(sc,GREEN,GREEN_TX);
+      let fname;
+      if(res.type==='found'){ const cand=res.candidates&&res.candidates[res.chosenIdx]; fname=res.outBase+extOf(cand?cand.name:'.jpg'); }
+      else { const e=state.imported[res.name]; fname=sanitizeFile(res.name)+(e?e.ext:'.jpg'); }
+      fc.value=fname; paint(fc,GREEN,GREEN_TX);
+    } else {
+      paint(nameC,RED,RED_TX); sc.value='غير موجودة'; paint(sc,RED,RED_TX); fc.value='—'; paint(fc,RED,RED_TX);
+    }
+  }
+  const buf=await state.outWb.xlsx.writeBuffer();
+  return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+// re-render everything that depends on the missing list (prompt, import list, suggestions)
+function refreshMissingUI(){ renderGemPrompt(); renderImport(); renderSuggestions(); }
+
+// ===================== results table: thumbnail / enlarge / swap / rename =====================
+function extOf(n){ const m=String(n).match(/\.[^.]+$/); return m?m[0]:'.jpg'; }
+function escapeAttr(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function renderResults(){
+  const tb=$('resTbl').querySelector('tbody'); tb.innerHTML='';
+  state.results.forEach((row,i)=>{
+    const tr=document.createElement('tr'); tr.className=row.type==='found'?'found':'miss';
+    if(row.type==='found'){
+      const cand=row.candidates[row.chosenIdx]; const ext=extOf(cand.name); const n=row.candidates.length;
+      const badge=`<span class="pill ok">✔ موجودة</span>${row.fallback?' <span class="lang-badge lang-en">لغة تانية</span>':''}${row.reordered?' <span class="lang-badge lang-ar">ترتيب</span>':''}${row.suggested?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">مقترح</span>':''}`;
+      const swap = n>1
+        ? `<button class="swap" data-i="${i}">🔄 بدّل (${row.chosenIdx+1}/${n})</button>`
+        : `<span class="muted" style="font-size:12px">الصورة الوحيدة</span>`;
+      tr.innerHTML=`
+        <td><img class="thumb clk" data-i="${i}" src="/api/file?id=${cand.id}" title="اضغط للتكبير"></td>
+        <td>${escapeHtml(row.name)}</td>
+        <td>${badge}</td>
+        <td><input class="rename" data-i="${i}" value="${escapeAttr(row.outBase)}"><span class="muted extlbl" style="font-size:12px"> ${escapeHtml(ext)}</span></td>
+        <td>${swap}</td>`;
+    } else {
+      tr.innerHTML=`<td><span class="muted">—</span></td><td>${escapeHtml(row.name)}</td>
+        <td><span class="pill no">✘ غير موجودة</span></td><td class="muted">—</td><td></td>`;
+    }
+    tb.appendChild(tr);
+  });
+}
+// enlarge preview on click; swap to next library image; rename (ZIP filename only)
+$('resTbl').addEventListener('click', e=>{
+  const sw=e.target.closest('.swap');
+  if(sw){ const i=+sw.dataset.i, row=state.results[i]; row.chosenIdx=(row.chosenIdx+1)%row.candidates.length;
+    const cand=row.candidates[row.chosenIdx]; const tr=sw.closest('tr');
+    tr.querySelector('img.thumb').src='/api/file?id='+cand.id;
+    const el=tr.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
+    sw.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
+    if(state.previewIdx===i) showPreview(i);
+    return; }
+  const im=e.target.closest('.thumb.clk'); if(im){ showPreview(+im.dataset.i); }
+});
+$('resTbl').addEventListener('input', e=>{
+  const rn=e.target.closest('.rename'); if(rn){ state.results[+rn.dataset.i].outBase = rn.value; }
+});
+function showPreview(i){
+  const row=state.results[i]; if(!row||row.type!=='found') return;
+  const cand=row.candidates[row.chosenIdx];
+  state.previewIdx=i;
+  $('previewImg').src='/api/file?id='+cand.id;
+  $('previewCap').textContent=`${row.name}  —  ${row.chosenIdx+1}/${row.candidates.length}`;
+  $('preview').style.display='flex';
+}
+$('previewClose').addEventListener('click', ()=>{ $('preview').style.display='none'; state.previewIdx=-1; });
+
+// ===================== Gemini prompt for missing items =====================
+const DEFAULT_GEM_HEADER = 'Generate different distinct images with white background, each image in single response, not in collage form, Generate all of them separately as per the item name and description and not including any words or extra items and zoom all of them out:';
+function chunk(arr,n){ const o=[]; for(let i=0;i<arr.length;i+=n) o.push(arr.slice(i,i+n)); return o; }
+function renderGemPrompt(){
+  const header = $('gemHeader').value || '';
+  // only items that still need an image (exclude ones you already imported)
+  const items = pendingMiss().map(r=>({name:r.name, section:r.section||''}));
+  const batches = chunk(items, 10);   // Gemini gives ~10 images per reply
+  state.gemBatches = batches;
+  if(state.gemBatch==null || state.gemBatch>=batches.length) state.gemBatch=0;
+  const b = batches[state.gemBatch] || [];
+  // item name as-is + section name beside it (only if the sheet has a section column)
+  $('gemPrompt').value = header + '\n\n' + b.map((it,i)=>`${i+1}. ${it.name}${it.section?' ('+it.section+')':''}`).join('\n');
+  $('gemBatchLbl').textContent = batches.length>1
+    ? `مجموعة ${state.gemBatch+1} من ${batches.length}  (${b.length} صنف)`
+    : `${items.length} صنف`;
+  const show = batches.length>1 ? 'inline-block' : 'none';
+  $('gemPrev').style.display=show; $('gemNext').style.display=show;
+}
+$('gemPrev').addEventListener('click', ()=>{ if(state.gemBatch>0){ state.gemBatch--; renderGemPrompt(); } });
+$('gemNext').addEventListener('click', ()=>{ if(state.gemBatch<(state.gemBatches.length-1)){ state.gemBatch++; renderGemPrompt(); } });
+$('gemHeader').value = localStorage.getItem('gemHeader') || DEFAULT_GEM_HEADER;
+$('gemHeader').addEventListener('input', ()=>{ localStorage.setItem('gemHeader', $('gemHeader').value); renderGemPrompt(); });
+async function copyGem(){
+  try{ await navigator.clipboard.writeText($('gemPrompt').value); return true; }
+  catch(e){ $('gemPrompt').select(); document.execCommand('copy'); return true; }
+}
+$('copyGem').addEventListener('click', async ()=>{ await copyGem(); const b=$('copyGem'); const t=b.textContent; b.textContent='✅ اتنسخ'; setTimeout(()=>b.textContent=t,1500); });
+$('openGem').addEventListener('click', async ()=>{ await copyGem(); window.open('https://gemini.google.com/app','_blank'); });
+
+// ----- direct generation via Gemini API (saved on disk by the backend) -----
+const DEFAULT_MODEL='gemini-2.5-flash-image-preview';
+$('gemKey').value   = localStorage.getItem('gemKey')   || '';
+$('gemModel').value = localStorage.getItem('gemModel') || DEFAULT_MODEL;
+$('gemKey').addEventListener('input',  ()=>localStorage.setItem('gemKey',   $('gemKey').value));
+$('gemModel').addEventListener('input',()=>localStorage.setItem('gemModel', $('gemModel').value));
+$('genBtn').addEventListener('click', async ()=>{
+  const key=$('gemKey').value.trim();
+  if(!key){ $('genProgress').innerHTML='⚠️ حُط مفتاح Gemini API الأول (مجاني من aistudio.google.com).'; return; }
+  const model=$('gemModel').value.trim()||DEFAULT_MODEL;
+  const header=$('gemHeader').value;
+  const items=pendingMiss().map(r=>r.name);
+  if(!items.length){ $('genProgress').textContent='مفيش أصناف ناقصة.'; return; }
+  $('genBtn').disabled=true; startOp();
+  const list=$('genList'); list.style.display='block';
+  list.innerHTML='<table><tbody></tbody></table>'; const tb=list.querySelector('tbody');
+  let ok=0, fail=0;
+  for(let i=0;i<items.length;i++){
+    if(state.cancel) break;
+    const it=items[i];
+    $('genProgress').textContent=`بولّد ${i+1}/${items.length}: ${it} ...`;
+    let res;
+    try{
+      res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key, model, prompt:header, item:it})}).then(r=>r.json());
+    }catch(e){ res={ok:false,error:String(e)}; }
+    const tr=document.createElement('tr');
+    if(res && res.ok){ ok++; tr.innerHTML=`<td>${escapeHtml(it)}</td><td><span class="pill ok">✔ اتولّدت</span></td><td class="muted">${escapeHtml(res.file||'')}</td>`; }
+    else { fail++; tr.innerHTML=`<td>${escapeHtml(it)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml((res&&res.error||'').slice(0,120))}</td>`; }
+    tb.appendChild(tr);
+  }
+  $('genProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅ خلصت'}: <b>${ok}</b> اتولّدت، <b>${fail}</b> فشلت. الصور اتحفظت في فولدر <b>images/_generated</b>.`;
+  $('genBtn').disabled=false; endOp();
+  loadLibrary(); // refresh so the new images join the library
+});
+
+// ----- import Gemini-downloaded images: resize ~220KB, rename to item, save to library + ZIP -----
+state.imported = {};
+function blobToB64(blob){
+  return blob.arrayBuffer().then(buf=>{
+    const b=new Uint8Array(buf); let s=''; const c=0x8000;
+    for(let i=0;i<b.length;i+=c) s+=String.fromCharCode.apply(null, b.subarray(i,i+c));
+    return btoa(s);
+  });
+}
+// Re-encode an image to JPEG aiming at ~targetKB.
+//  allowGrow=false : only shrink if bigger than target (don't upscale small images) — for library images.
+//  allowGrow=true  : also ENLARGE small images (by upscaling dimensions) up to ~targetKB — for images you provide.
+async function resizeToKB(file, targetKB=300, allowGrow=false){
+  const url=URL.createObjectURL(file);
+  const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error('الملف ده مش صورة صالحة')); i.src=url; });
+  URL.revokeObjectURL(url);
+  const target=targetKB*1024, Q=0.92, MAXDIM=4096;   // cap canvas size (browser limit) to avoid null blobs
+  const ow=img.naturalWidth||512, oh=img.naturalHeight||512;
+  const canvas=document.createElement('canvas');
+  const renderAt=async(scale)=>{
+    let w=Math.max(1,Math.round(ow*scale)), h=Math.max(1,Math.round(oh*scale));
+    const m=Math.max(w,h); if(m>MAXDIM){ const k=MAXDIM/m; w=Math.max(1,Math.round(w*k)); h=Math.max(1,Math.round(h*k)); }
+    canvas.width=w; canvas.height=h;
+    const ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img,0,0,w,h);
+    return await new Promise(r=>canvas.toBlob(r,'image/jpeg',Q));
+  };
+  const base = await renderAt(1);
+  if(!base) throw new Error('فشل تجهيز الصورة');
+  if(base.size<=target){
+    if(!allowGrow) return base;
+    const maxScale = Math.max(1, Math.min(8, MAXDIM/Math.max(ow,oh)));   // don't exceed canvas cap
+    if(maxScale<=1.001) return base;
+    const hiBlob = await renderAt(maxScale);
+    if(!hiBlob || hiBlob.size<=target) return hiBlob||base;             // can't reach target -> biggest we can
+    let lo=1, hi=maxScale, best=base;
+    for(let i=0;i<10;i++){ const mid=(lo+hi)/2; const b=await renderAt(mid); if(b && b.size<=target){ best=b; lo=mid; } else hi=mid; }
+    return best;
+  }
+  // too big -> shrink
+  let lo=0.05, hi=1, best=null;
+  for(let i=0;i<12;i++){ const mid=(lo+hi)/2; const b=await renderAt(mid); if(b && b.size<=target){ best=b; lo=mid; } else hi=mid; }
+  return best || base;
+}
+// honor the "compress all images on download" checkbox (library images: shrink only)
+async function maybeResize(blob, fallbackName){
+  if($('resizeOn') && $('resizeOn').checked){
+    const b=await resizeToKB(blob, parseInt($('targetKB').value)||300, true);  // bring every image to ~target (grow or shrink)
+    return { blob:b, ext:'.jpg' };
+  }
+  return { blob, ext:extOf(fallbackName) };
+}
+function renderImport(){
+  const items=missMiss().map(r=>r.name); const box=$('impList');
+  if(!items.length){ box.style.display='none'; return; }
+  box.style.display='block';
+  let html='<table><tbody>';
+  items.forEach(it=>{
+    const imp=state.imported[it];
+    const status = imp ? `<span class="pill ok">✔ اترفعت (${Math.round(imp.blob.size/1024)}KB)</span>` : '<span class="muted">—</span>';
+    const thumb = imp ? `<img class="thumb" src="${URL.createObjectURL(imp.blob)}">` : '';
+    html+=`<tr><td>${escapeHtml(it)}</td><td><input type="file" accept="image/*" class="impFile" data-item="${escapeAttr(it)}" style="padding:4px"></td><td class="impStatus">${status}</td><td class="impThumb">${thumb}</td></tr>`;
+  });
+  html+='</tbody></table>'; box.innerHTML=html;
+  box.querySelectorAll('.impFile').forEach(inp=>inp.addEventListener('change', onImpFile));
+}
+async function onImpFile(e){
+  const file=e.target.files[0]; if(!file) return;
+  const item=e.target.dataset.item, tr=e.target.closest('tr');
+  const statusEl=tr.querySelector('.impStatus'), thumbEl=tr.querySelector('.impThumb');
+  statusEl.textContent='بضغط...';
+  try{
+    await importOne(item, file);
+    const imp=state.imported[item];
+    statusEl.innerHTML=`<span class="pill ok">✔ اترفعت (${Math.round(imp.blob.size/1024)}KB)</span>`;
+    thumbEl.innerHTML=`<img class="thumb" src="${URL.createObjectURL(imp.blob)}">`;
+    $('impProgress').innerHTML=`اترفع <b>${Object.keys(state.imported).length}</b> صورة. واختفوا من الاقتراحات والبرومت.`;
+    renderGemPrompt(); renderSuggestions();   // drop this item from prompt + suggestions
+  }catch(err){ statusEl.innerHTML='<span class="pill no">✘ فشل</span>'; $('impProgress').textContent=String(err); }
+}
+// resize one image to target KB, save to library under the item name, record it
+async function importOne(item, file){
+  const blob = await resizeToKB(file, parseInt($('targetKB').value)||300, true);   // grow small images up to target too
+  const b64=await blobToB64(blob);
+  const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item,ext:'.jpg',b64})}).then(r=>r.json());
+  if(!(res && res.ok)) throw new Error((res&&res.error)||'فشل الحفظ');
+  state.imported[item]={blob, ext:'.jpg'};
+  $('impZip').disabled=false; $('combineZip').disabled=false;
+  return blob;
+}
+$('impZip').addEventListener('click', async ()=>{
+  const keys=Object.keys(state.imported); if(!keys.length) return;
+  const zip=new JSZip(); const used=new Set();
+  for(const it of keys){ const e=state.imported[it]; let n=sanitizeFile(it)+e.ext; if(used.has(n)) n=uniqueName(used,n); used.add(n); zip.file(n, e.blob); }
+  download(await zip.generateAsync({type:'blob'}), 'gemini_images.zip');
+  loadLibrary();
+});
+// match an uploaded filename to one of the still-missing item names (so bulk imports get named right)
+function matchToMissing(base){
+  const miss=pendingMiss().map(r=>r.name); if(!miss.length) return null;
+  const n=normalizeName(base), t=tightKey(base), s=sortedKey(base);
+  for(const m of miss){ if(normalizeName(m)===n) return m; }
+  for(const m of miss){ if(tightKey(m)===t || sortedKey(m)===s) return m; }
+  return null;
+}
+// bulk import: many images (or a ZIP) at once -> resize + auto-name by matching -> save + combine
+$('bulkFiles').addEventListener('change', async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const target=parseInt($('targetKB').value)||300;
+  startOp(); $('bulkProgress').textContent='بفك وبجهّز...';
+  // gather image blobs (unzip any .zip)
+  const imgs=[];
+  for(const f of files){
+    if(/\.zip$/i.test(f.name) || f.type==='application/zip'){
+      try{ const z=await JSZip.loadAsync(f);
+        for(const path of Object.keys(z.files)){ const en=z.files[path]; if(en.dir) continue; if(!/\.(jpe?g|png|webp)$/i.test(path)) continue; imgs.push({name:path.split('/').pop(), blob:await en.async('blob')}); }
+      }catch(err){ $('bulkProgress').textContent='ملف ZIP مش مقروء: '+err.message; }
+    } else if(/\.(jpe?g|png|webp)$/i.test(f.name) || /^image\//.test(f.type)){
+      imgs.push({name:f.name, blob:f});
+    }
+  }
+  if(!imgs.length){ $('bulkProgress').textContent='مفيش صور صالحة في اللي رفعته.'; endOp(); return; }
+  let done=0, mapped=0;
+  for(const im of imgs){
+    if(state.cancel) break;
+    done++; $('bulkProgress').textContent=`بجهّز ${done}/${imgs.length}...`;
+    try{
+      const base=stripExt(im.name); const matched=matchToMissing(base);
+      const itemName = matched || base; if(matched) mapped++;
+      await importOne(itemName, im.blob);   // resize + save + record
+    }catch(err){ /* skip a bad image */ }
+  }
+  refreshMissingUI();   // sync: filled in per-item list + dropped from prompt & suggestions
+  $('bulkProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅ خلص'}: اترفع <b>${Object.keys(state.imported).length}</b> صورة (منهم ${mapped} اتسمّوا تلقائيًا بمطابقة الأسماء، الباقي باسم الملف). كل واحدة ~${target}KB. دوس «نزّل الكل» تجمعهم مع الموجود.`;
+  endOp();
+  loadLibrary();
+});
+// combined ZIP: found library images (renamed) + imported images (renamed) in one file
+$('combineZip').addEventListener('click', async ()=>{
+  const found=(state.results||[]).filter(r=>r.type==='found');
+  const imp=Object.keys(state.imported);
+  if(!found.length && !imp.length) return;
+  $('combineZip').disabled=true; startOp(); const zip=new JSZip(); const used=new Set(); let k=0; const total=found.length+imp.length;
+  for(const row of found){ if(state.cancel) break; const cand=row.candidates[row.chosenIdx];
+    $('impProgress').textContent=`بجمّع الكل... ${++k}/${total}`;
+    const raw=await fetch('/api/file?id='+cand.id,{cache:'no-store'}).then(r=>r.blob());
+    const {blob,ext}=await maybeResize(raw, cand.name);
+    let n=sanitizeFile(row.outBase)+ext; if(used.has(n))n=uniqueName(used,n); used.add(n); zip.file(n,blob); }
+  for(const it of imp){ if(state.cancel) break; const e=state.imported[it]; let n=sanitizeFile(it)+e.ext; if(used.has(n))n=uniqueName(used,n); used.add(n);
+    $('impProgress').textContent=`بجمّع الكل... ${++k}/${total}`; zip.file(n, e.blob); }
+  download(await zip.generateAsync({type:'blob'}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_all_images.zip');
+  $('impProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅'} نزّل ملف فيه <b>${k}</b> صورة (الموجودة + المستوردة).`; $('combineZip').disabled=false; endOp();
+});
+
+// ----- smart suggestions: near-matches from the library for missing items (added only on confirm) -----
+function findSuggestions(name, limit=4, minCoverage=0){
+  const lang=langOf(name);
+  const toks=normalizeName(name).split(' ').filter(w=>w.length>=2);
+  if(!toks.length) return [];
+  const tset=new Set(toks); const scored=[];
+  for(const item of (state.rawList||[])){
+    if(item._lang!==lang || !item._toks || !item._toks.length) continue;
+    let overlap=0; for(const w of item._toks) if(tset.has(w)) overlap++;
+    if(!overlap) continue;
+    const union = new Set([...toks, ...item._toks]).size;
+    const coverage = overlap/toks.length;                 // how many of the item's words are present
+    const jaccard  = overlap/union;                        // overall similarity
+    const extra    = Math.max(0, item._toks.length-overlap)*0.08;  // penalize candidate's extra words
+    const full     = coverage>=1 ? 0.5 : 0;               // bonus when ALL the item's words are present
+    const score = coverage*2 + jaccard + full - extra;
+    if(coverage < minCoverage) continue;
+    scored.push({item, score, coverage});
+  }
+  scored.sort((a,b)=> b.score-a.score);
+  const seen=new Set(), out=[];
+  for(const s of scored){ if(seen.has(s.item.name)) continue; seen.add(s.item.name); s.item._cov=s.coverage; out.push(s.item); if(out.length>=limit) break; }
+  return out;
+}
+// ----- fixed category images (persistent fallback suggestions by keyword) -----
+state.fixed = JSON.parse(localStorage.getItem('fixedMap')||'[]');
+function saveFixed(){ localStorage.setItem('fixedMap', JSON.stringify(state.fixed)); }
+function fixedResolve(file){ const it=(state.rawList||[]).find(x=>x.name===file); return it?it.id:null; }
+function findFixed(name){
+  const norm=normalizeName(name); const toks=new Set(norm.split(' ').filter(Boolean)); const out=[];
+  for(const fx of (state.fixed||[])){
+    const hit=(fx.keywords||[]).some(k=>{ const nk=normalizeName(k); return nk && (toks.has(nk) || norm.includes(nk)); });
+    if(hit){ const id=fixedResolve(fx.file); if(id!=null) out.push({id, name:fx.file, fixed:true}); }
+  }
+  return out;
+}
+function renderFixed(){
+  const box=$('fxList'); if(!box) return;
+  box.innerHTML=(state.fixed||[]).map((fx,i)=>{
+    const id=fixedResolve(fx.file);
+    const img=id!=null?`<img class="thumb" src="/api/file?id=${id}">`:'<span class="muted" style="font-size:11px">(مش متحمّلة)</span>';
+    return `<div style="text-align:center;border:1px solid var(--line);border-radius:9px;padding:6px">${img}<br><span class="muted" style="font-size:11px">${escapeHtml((fx.keywords||[]).join(', '))}</span><br><button class="fxDel" data-i="${i}" style="font-size:11px;padding:3px 8px;margin-top:3px;background:var(--soft);border:1px solid var(--line);color:var(--txt)">حذف</button></div>`;
+  }).join('');
+}
+$('fxAdd').addEventListener('click', async ()=>{
+  const kw=$('fxKeywords').value.split(/[,،]/).map(s=>s.trim()).filter(Boolean);
+  const file=$('fxFile').files[0];
+  if(!kw.length || !file){ $('fxProgress').textContent='حُط كلمات مفتاحية وصورة الأول.'; return; }
+  $('fxProgress').textContent='بحفظ...';
+  try{
+    const blob=await resizeToKB(file, 300, true); const b64=await blobToB64(blob);
+    const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:kw[0], ext:'.jpg', b64, folder:'_fixed'})}).then(r=>r.json());
+    if(!(res&&res.ok)) throw new Error((res&&res.error)||'فشل');
+    state.fixed=(state.fixed||[]).filter(x=>x.file!==res.file);
+    state.fixed.push({keywords:kw, file:res.file}); saveFixed();
+    $('fxKeywords').value=''; $('fxFile').value='';
+    await loadLibrary(); renderFixed();
+    $('fxProgress').textContent=`✅ اتحفظت لـ: ${kw.join(', ')}`;
+  }catch(err){ $('fxProgress').textContent='فشل: '+err.message; }
+});
+$('fxList').addEventListener('click', e=>{ const b=e.target.closest('.fxDel'); if(!b) return; state.fixed.splice(+b.dataset.i,1); saveFixed(); renderFixed(); });
+
+$('suggestBtn').addEventListener('click', ()=>{
+  const missing=pendingMiss().map(r=>r.name);   // only items that still need an image
+  state.dismissed=new Set();
+  if(!missing.length){ $('suggestProgress').textContent='مفيش أصناف ناقصة محتاجة صور.'; state.suggestBlocks=[]; renderSuggestions(); return; }
+  $('suggestProgress').textContent='بدوّر في المكتبة...';
+  const blocks=[];
+  for(const r of pendingMiss()){
+    const name=r.name;
+    const lib=findSuggestions(name);                                   // up to 4 same-language
+    // other-language suggestion: 2nd column name (looser) or a translation (stricter, to avoid far hits)
+    let other=[];
+    if(r.alt) other=findSuggestions(r.alt, 1, 0.5);
+    else { const tn=translateName(name); if(tn) other=findSuggestions(tn, 1, 0.6); }
+    other=other.map(it=>({id:it.id, name:it.name, otherLang:true}));
+    const fx=findFixed(name);                                          // fixed category fallbacks
+    const map=new Map(); [...lib, ...other, ...fx].forEach(it=>{ if(!map.has(it.id)) map.set(it.id, it); });
+    const sugg=[...map.values()].slice(0,7);
+    if(sugg.length) blocks.push({name, sugg});
+  }
+  state.suggestBlocks=blocks; renderSuggestions();
+  $('suggestProgress').innerHTML = blocks.length
+    ? `لقيت اقتراحات لـ <b>${blocks.length}</b> صنف من ${missing.length}. راجعها ودوس «أضيفها» للي يناسبك.`
+    : 'مفيش اقتراحات قريبة في المكتبة.';
+});
+function renderSuggestions(){
+  const box=$('suggestList');
+  const pend=new Set(pendingMiss().map(r=>r.name));
+  const dis=state.dismissed||(state.dismissed=new Set());
+  const blocks=(state.suggestBlocks||[]).filter(b=>pend.has(b.name) && !dis.has(b.name));
+  let html='';
+  blocks.forEach((b)=>{
+    const bi=(state.suggestBlocks||[]).indexOf(b);
+    html+=`<div class="sugBlock" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <b>${escapeHtml(b.name)}</b>
+        <span style="display:flex;gap:6px;align-items:center">
+          <label class="ownImg" style="cursor:pointer;font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:5px 10px">📤 صورة من عندي<input type="file" accept="image/*" class="ownImgInp" data-name="${escapeAttr(b.name)}" style="display:none"></label>
+          <button class="dismissSug" data-name="${escapeAttr(b.name)}" title="إخفاء الاقتراح" style="background:var(--soft);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:5px 10px;font-size:13px">✕</button>
+        </span>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">`;
+    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; html+=`<div style="text-align:center"><img class="thumb clk2" data-id="${it.id}" style="width:84px;height:84px" src="/api/file?id=${it.id}"><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
+    html+=`</div></div>`;
+  });
+  box.innerHTML=html;
+}
+$('suggestList').addEventListener('click', e=>{
+  const img=e.target.closest('.clk2'); if(img){ const id=img.dataset.id; $('previewImg').src='/api/file?id='+id; $('previewCap').textContent='معاينة'; $('preview').style.display='flex'; return; }
+  const dz=e.target.closest('.dismissSug'); if(dz){ (state.dismissed||(state.dismissed=new Set())).add(dz.dataset.name); renderSuggestions(); return; }
+  const btn=e.target.closest('.acceptSug'); if(!btn) return;
+  const b=state.suggestBlocks[+btn.dataset.b]; const cand=b.sugg[+btn.dataset.s];
+  acceptSuggestion(b.name, cand);
+});
+$('suggestList').addEventListener('change', async e=>{
+  const inp=e.target.closest('.ownImgInp'); if(!inp || !inp.files[0]) return;
+  await useOwnImage(inp.dataset.name, inp.files[0]);
+});
+// upload your own image for a missing item -> save to library (named after it) -> mark it found everywhere
+async function useOwnImage(name, file){
+  try{
+    $('suggestProgress').textContent='بجهّز صورتك...';
+    await importOne(name, file);
+    await loadLibrary();
+    const saved=sanitizeFile(name)+'.jpg';
+    const it=(state.rawList||[]).find(x=>x.name===saved);
+    if(it) acceptSuggestion(name, {id:it.id, name:saved});
+    else refreshMissingUI();
+    $('suggestProgress').textContent='✅ اتحطت صورتك للصنف: '+name;
+  }catch(err){ $('suggestProgress').textContent='فشل: '+err.message; }
+}
+// promote EVERY occurrence of this item name from miss -> found (so it applies across the whole menu)
+function acceptSuggestion(name, cand){
+  let changed=false;
+  state.results.forEach((r,idx)=>{
+    if(r.type==='miss' && r.name===name){
+      state.results[idx]={type:'found', name, candidates:[cand], chosenIdx:0, outBase:sanitizeFile(name), fallback:false, reordered:false, suggested:true, row:r.row};
+      changed=true;
+    }
+  });
+  if(!changed) return;
+  const f=state.results.filter(r=>r.type==='found').length, m=state.results.filter(r=>r.type==='miss').length;
+  $('cFound').textContent=f; $('cMiss').textContent=m; $('cImgs').textContent=f;
+  renderResults(); refreshMissingUI();   // sheet, prompt, import list, suggestions all reflect it
+  $('dlZip').disabled = f===0; $('combineZip').disabled = f===0;
+}
+
+// returns { list:[...matches], tier:'exact'|'tight'|'sorted'|null }
+function lookup(name, useFuzzy){
+  const lang=langOf(name);                       // match only within the same language
+  const n=lang+'|'+normalizeName(name);
+  if(state.images.normMap.has(n)) return { list:state.images.normMap.get(n), tier:'exact' };
+  if(useFuzzy){
+    const t=lang+'|'+tightKey(name);
+    if(state.images.tightMap.has(t)) return { list:state.images.tightMap.get(t), tier:'tight' };
+    const s=lang+'|'+sortedKey(name);            // word order doesn't matter
+    if(state.images.sortedMap.has(s)) return { list:state.images.sortedMap.get(s), tier:'sorted' };
+  }
+  return { list:[], tier:null };
+}
+function setCell(ws,r,c,val,bold){ const cell=ws.getRow(r).getCell(c); cell.value=val; if(bold) cell.font={bold:true}; }
+function paint(cell, bg, txt){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
+  const prev=cell.font||{}; cell.font={...prev,color:{argb:txt}};
+}
+function uniqueName(set,name){ const dot=name.lastIndexOf('.'); const b=dot>=0?name.slice(0,dot):name; const e=dot>=0?name.slice(dot):''; let i=2,c=`${b} (${i})${e}`; while(set.has(c)){i++;c=`${b} (${i})${e}`;} return c; }
+function sanitizeFile(s){ return String(s).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim() || 'image'; }
+
+// ===================== standalone resizer =====================
+$('rsBtn').addEventListener('click', async ()=>{
+  const files=[...$('rsFiles').files]; if(!files.length){ $('rsProgress').textContent='اختار صور الأول.'; return; }
+  const kb=parseInt($('rsKB').value)||300;
+  $('rsBtn').disabled=true; startOp(); const zip=new JSZip(); const used=new Set(); let ok=0;
+  for(let i=0;i<files.length;i++){
+    if(state.cancel) break; const f=files[i];
+    $('rsProgress').textContent=`بظبّط ${i+1}/${files.length}...`;
+    try{ const b=await resizeToKB(f, kb, true); let n=sanitizeFile(stripExt(f.name))+'.jpg'; if(used.has(n)) n=uniqueName(used,n); used.add(n); zip.file(n,b); ok++; }catch(e){}
+  }
+  download(await zip.generateAsync({type:'blob'}), 'resized_'+kb+'kb.zip');
+  $('rsProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅'} اتظبط <b>${ok}</b> صورة على ~${kb}KB.`; $('rsBtn').disabled=false; endOp();
+});
+
+// ===================== downloads =====================
+$('dlXlsx').addEventListener('click', async ()=>{ const blob=await buildSheetBlob(); if(blob) download(blob, state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_marked.xlsx'); });
+// build the ZIP at download time from current choices (swapped image + renamed file)
+$('dlZip').addEventListener('click', async ()=>{
+  const found=(state.results||[]).filter(r=>r.type==='found'); if(!found.length) return;
+  $('dlZip').disabled=true; startOp(); const zip=new JSZip(); const used=new Set(); let n=0;
+  for(let k=0;k<found.length;k++){
+    if(state.cancel) break;
+    const row=found[k]; const cand=row.candidates[row.chosenIdx];
+    log(`بجهّز الـ ZIP... ${k+1}/${found.length}`);
+    const raw=await fetch('/api/file?id='+cand.id,{cache:'no-store'}).then(r=>r.blob());
+    const {blob,ext}=await maybeResize(raw, cand.name);
+    let nm=sanitizeFile(row.outBase)+ext; if(used.has(nm)) nm=uniqueName(used,nm); used.add(nm);
+    zip.file(nm, blob); n++;
+  }
+  download(await zip.generateAsync({type:'blob'}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_images.zip');
+  log(state.cancel?`⏹️ اتوقف — اتحمّل ${n} صورة.`:'تم تحميل الـ ZIP ✅'); $('dlZip').disabled=false; endOp();
+});
+function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+</script>
+</body>
+</html>
