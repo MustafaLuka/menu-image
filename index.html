@@ -291,7 +291,7 @@
     </div>
     <div class="dl">
       <button id="dlXlsx" class="ghost">⬇️ تحميل الشيت الملوّن (.xlsx)</button>
-      <button id="dlZip" class="ghost">⬇️ تحميل صور المطابقة (.zip)</button>
+      <button id="dlZip" class="ghost">⬇️ تحميل صور المطابقة <span id="dlZipCount" class="notranslate" style="font-size:11px;opacity:.65"></span> (.zip)</button>
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;margin-bottom:6px;align-items:center">
       <span class="muted" style="font-size:13px">عرض:</span>
@@ -393,6 +393,16 @@
         </div>
         <!-- Gemini tools (shown after match with missing items) -->
         <div id="gemBox" style="display:none;">
+
+          <!-- ── User-facing AI generation (uses admin-configured service; no tech details shown) ── -->
+          <div class="card" id="aiGenUserCard">
+            <h2 style="font-size:17px">🤖 <span data-i18n="توليد الصور الناقصة بالـ AI">توليد الصور الناقصة بالـ AI</span></h2>
+            <div class="hint" style="margin-bottom:10px" data-i18n="بضغطة واحدة — التطبيق بيولّد صور لكل الأصناف الناقصة أوتوماتيك.">بضغطة واحدة — التطبيق بيولّد صور لكل الأصناف الناقصة أوتوماتيك.</div>
+            <button id="aiGenBtn">🤖 <span data-i18n="ولّد الصور الناقصة بالـ AI">ولّد الصور الناقصة بالـ AI</span></button>
+            <div id="aiGenProgress" class="hint" style="margin-top:8px"></div>
+            <div id="aiGenList" class="tbl-wrap" style="display:none;max-height:260px;margin-top:8px"></div>
+          </div>
+
           <div class="card">
             <h3 style="margin:0 0 4px;font-size:15px">✨ الأصناف الناقصة → برومت Gemini</h3>
             <div class="hint">التطبيق جمّع كل الأصناف اللي ملقاش لها صور في برومت واحد. عدّل النص لو عايز، وبعدين انسخه أو افتح Gemini والصقه.</div>
@@ -633,6 +643,8 @@ function applyAuth(auth){
   if(lbl) lbl.textContent=auth.email||(auth.role==='admin'?'Admin':'User');
   const adminBtn=document.querySelector('[data-panel="admin"]');
   if(adminBtn) adminBtn.style.display=auth.role==='admin'?'flex':'none';
+  const aiUserCard=document.getElementById('aiGenUserCard');
+  if(aiUserCard) aiUserCard.style.display=auth.role==='admin'?'none':'block';
   window._lastAuth=auth;
   const loginInfoEl=document.getElementById('adminLoginInfo');
   if(loginInfoEl) _renderLoginInfoEl(loginInfoEl, auth);
@@ -1001,6 +1013,17 @@ const I18N = {
   'الأبعاد':'Dimensions',
   // option text
   '(بدون)':'(none)',
+  // user-facing AI generation card
+  'توليد الصور الناقصة بالـ AI':'Generate Missing Images via AI',
+  'بضغطة واحدة — التطبيق بيولّد صور لكل الأصناف الناقصة أوتوماتيك.':'One click — the app automatically generates images for all missing items.',
+  'ولّد الصور الناقصة بالـ AI':'Generate Missing Images via AI',
+  'خدمة الـ AI لسه مش مفعّلة. كلّم الأدمن.':'AI service not configured yet. Ask the admin.',
+  // shared generate progress strings
+  'بيولّد':'Generating',
+  'اتوقف':'Stopped',
+  'خلصت':'Done',
+  'اتولّدت':'generated',
+  'فشلت':'failed',
 };
 let LANG = localStorage.getItem('lang') || 'ar';
 const _origText = new WeakMap();
@@ -1709,7 +1732,7 @@ $('runBtn').addEventListener('click', async ()=>{
   const _emr=document.getElementById('emailNoResults'); if(_emr) _emr.style.display=miss>=0?'none':'block';
   const _emc=document.getElementById('emailCard'); if(_emc) _emc.style.display=miss>=0?'block':'none';
 
-  $('dlZip').disabled = found===0;
+  $('dlZip').disabled = found===0; updateDlZipCount();
   $('resultCard').style.display='block';
   $('resultCard').scrollIntoView({behavior:'smooth'});
   endRun(LANG==='en'
@@ -1957,7 +1980,52 @@ $('genBtn').addEventListener('click', async ()=>{
   $('genBtn').disabled=false; endOp();
 });
 
-// ----- generate via n8n webhook (internal Talabat AI gateway; token lives in n8n, never in the browser) -----
+// ----- shared n8n generation function (used by admin card + user-facing button) -----
+async function _runN8nGenerate(url, model, progressEl, listEl, btnEl){
+  const header=$('gemHeader').value||'';
+  const pmode=(document.querySelector('.pm-btn.on')||{}).dataset && document.querySelector('.pm-btn.on').dataset.pmode || 'sec';
+  const rows=pendingMiss().map(r=>({name:r.name, section:r.section||'', desc:r.desc||''}));
+  if(!rows.length){ progressEl.textContent=tr('مفيش أصناف ناقصة محتاجة صور.'); return; }
+  btnEl.disabled=true; startOp();
+  listEl.style.display='block';
+  listEl.innerHTML='<table><tbody></tbody></table>'; const tb=listEl.querySelector('tbody');
+  let ok=0, fail=0;
+  for(let i=0;i<rows.length;i++){
+    if(state.cancel) break;
+    const it=rows[i];
+    let prompt=header+'\n\n'+it.name+(it.section?' ('+it.section+')':'');
+    if(pmode==='sec_desc' && it.desc) prompt+=' — '+it.desc;
+    progressEl.textContent=tr('بيولّد')+ ` ${i+1}/${rows.length}: ${it.name} ...`;
+    const row=document.createElement('tr');
+    try{
+      const res=await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({item:it.name, section:it.section, description:it.desc, prompt, model})});
+      let data; try{ data=await res.json(); }catch(e){ throw new Error('رد الخدمة مش JSON صالح (HTTP '+res.status+')'); }
+      if(!res.ok || !data.ok || !data.imageBase64) throw new Error(data.error||('HTTP '+res.status));
+      const blob=await (await fetch(`data:${data.mime||'image/png'};base64,${data.imageBase64}`)).blob();
+      await importOne(it.name, blob);
+      ok++;
+      const imp=state.imported[it.name];
+      acceptSuggestion(it.name, {url:URL.createObjectURL(imp.blob), name:it.name});
+      row.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill ok">✔ اتولّدت (${Math.round(imp.blob.size/1024)}KB)</span></td><td class="impThumb"><img class="thumb" src="${URL.createObjectURL(imp.blob)}"></td>`;
+    }catch(err){ fail++; row.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml(String(err.message||err).slice(0,140))}</td>`; }
+    tb.appendChild(row);
+    renderImport(); renderGemPrompt(); renderSuggestions(); updateDlZipCount();
+  }
+  progressEl.innerHTML=`${state.cancel?'⏹️ '+tr('اتوقف'):'✅ '+tr('خلصت')}: <b>${ok}</b> ${tr('اتولّدت')}، <b>${fail}</b> ${tr('فشلت')}.`;
+  if(ok && !CLOUD) loadLibrary();
+  btnEl.disabled=false; endOp();
+}
+
+// ----- user-facing AI generation button (reads admin-configured URL; no tech details shown) -----
+$('aiGenBtn').addEventListener('click', async ()=>{
+  const url=(localStorage.getItem('n8nWebhookUrl')||'').trim();
+  if(!url){ $('aiGenProgress').innerHTML=tr('خدمة الـ AI لسه مش مفعّلة. كلّم الأدمن.'); return; }
+  const model=localStorage.getItem('n8nModel')||'gpt-image-1.5';
+  await _runN8nGenerate(url, model, $('aiGenProgress'), $('aiGenList'), $('aiGenBtn'));
+});
+
+// ----- generate via n8n webhook — admin card (full config) -----
 $('n8nWebhookUrl').value = localStorage.getItem('n8nWebhookUrl') || '';
 $('n8nModel').value = localStorage.getItem('n8nModel') || 'gpt-image-1.5';
 $('n8nWebhookUrl').addEventListener('input', ()=>localStorage.setItem('n8nWebhookUrl', $('n8nWebhookUrl').value));
@@ -1966,39 +2034,7 @@ $('n8nGenBtn').addEventListener('click', async ()=>{
   const url=$('n8nWebhookUrl').value.trim();
   if(!url){ $('n8nGenProgress').innerHTML='⚠️ حُط رابط n8n webhook الأول.'; return; }
   const model=$('n8nModel').value;
-  const header=$('gemHeader').value||'';
-  const pmode=(document.querySelector('.pm-btn.on')||{}).dataset && document.querySelector('.pm-btn.on').dataset.pmode || 'sec';
-  const rows=pendingMiss().map(r=>({name:r.name, section:r.section||'', desc:r.desc||''}));
-  if(!rows.length){ $('n8nGenProgress').textContent=tr('مفيش أصناف ناقصة محتاجة صور.'); return; }
-  $('n8nGenBtn').disabled=true; startOp();
-  const list=$('n8nGenList'); list.style.display='block';
-  list.innerHTML='<table><tbody></tbody></table>'; const tb=list.querySelector('tbody');
-  let ok=0, fail=0;
-  for(let i=0;i<rows.length;i++){
-    if(state.cancel) break;
-    const it=rows[i];
-    let prompt=header+'\n\n'+it.name+(it.section?' ('+it.section+')':'');
-    if(pmode==='sec_desc' && it.desc) prompt+=' — '+it.desc;
-    $('n8nGenProgress').textContent=`بولّد عبر n8n ${i+1}/${rows.length}: ${it.name} ...`;
-    const tr=document.createElement('tr');
-    try{
-      const res=await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({item:it.name, section:it.section, description:it.desc, prompt, model})});
-      let data; try{ data=await res.json(); }catch(e){ throw new Error('رد n8n مش JSON صالح (HTTP '+res.status+')'); }
-      if(!res.ok || !data.ok || !data.imageBase64) throw new Error(data.error||('HTTP '+res.status));
-      const blob=await (await fetch(`data:${data.mime||'image/png'};base64,${data.imageBase64}`)).blob();
-      await importOne(it.name, blob);                          // resize to target KB + store (+persist if local)
-      ok++;
-      const imp=state.imported[it.name];
-      acceptSuggestion(it.name, {url:URL.createObjectURL(imp.blob), name:it.name});   // mark found everywhere -> dashboard "ناقص" count drops live
-      tr.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill ok">✔ اتولّدت (${Math.round(imp.blob.size/1024)}KB)</span></td><td class="impThumb"><img class="thumb" src="${URL.createObjectURL(imp.blob)}"></td>`;
-    }catch(err){ fail++; tr.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml(String(err.message||err).slice(0,140))}</td>`; }
-    tb.appendChild(tr);
-    renderImport(); renderGemPrompt(); renderSuggestions();   // drop generated items from prompt/suggestions live
-  }
-  $('n8nGenProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅ خلصت'}: <b>${ok}</b> اتولّدت، <b>${fail}</b> فشلت.`;
-  if(ok && !CLOUD) loadLibrary();   // local: refresh so the new images join the library for next time
-  $('n8nGenBtn').disabled=false; endOp();
+  await _runN8nGenerate(url, model, $('n8nGenProgress'), $('n8nGenList'), $('n8nGenBtn'));
 });
 
 // ----- import Gemini-downloaded images: resize ~220KB, rename to item, save to library + ZIP -----
@@ -2734,7 +2770,7 @@ function acceptSuggestion(name, cand){
   const f=state.results.filter(r=>r.type==='found').length, m=state.results.filter(r=>r.type==='miss').length;
   $('cFound').textContent=f; $('cMiss').textContent=m; $('cImgs').textContent=f;
   renderResults(); refreshMissingUI();   // sheet, prompt, import list, suggestions all reflect it
-  $('dlZip').disabled = f===0; $('combineZip').disabled = f===0;
+  $('dlZip').disabled = f===0; $('combineZip').disabled = f===0; updateDlZipCount();
 }
 
 // returns { list:[...matches], tier:'exact'|'tight'|'sorted'|null }
@@ -2818,6 +2854,10 @@ $('rsBtn').addEventListener('click', async ()=>{
 });
 
 // ===================== downloads =====================
+function updateDlZipCount(){
+  const n=(state.results||[]).filter(r=>r.type==='found').length;
+  const el=$('dlZipCount'); if(el) el.textContent=n>0?`(${n})`:'';
+}
 $('dlXlsx').addEventListener('click', async ()=>{ const blob=await buildSheetBlob(); if(blob) download(blob, state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_marked.xlsx'); });
 // build the ZIP at download time from current choices (swapped image + renamed file)
 $('dlZip').addEventListener('click', async ()=>{
