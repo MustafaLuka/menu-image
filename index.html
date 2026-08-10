@@ -1893,9 +1893,9 @@ function renderGemPrompt(){
     if(pmode==='sec_desc' && it.desc) line+=` — ${it.desc}`;
     return line;
   }).join('\n');
-  $('gemBatchLbl').textContent = batches.length>1
-    ? `مجموعة ${state.gemBatch+1} من ${batches.length}  (${b.length} صنف)`
-    : `${items.length} صنف`;
+  $('gemBatchLbl').textContent = LANG==='en'
+    ? (batches.length>1 ? `Group ${state.gemBatch+1} of ${batches.length}  (${b.length} items)` : `${items.length} items`)
+    : (batches.length>1 ? `مجموعة ${state.gemBatch+1} من ${batches.length}  (${b.length} صنف)` : `${items.length} صنف`);
   const show = batches.length>1 ? 'inline-block' : 'none';
   $('gemPrev').style.display=show; $('gemNext').style.display=show;
 }
@@ -2620,8 +2620,8 @@ $('suggestBtn').addEventListener('click', async ()=>{
       [...lib,...descSupp].forEach(it=>{ const k=mapKey(it); if(!mainMap.has(k)) mainMap.set(k,it); });
       const mainSugg=[...mainMap.values()].slice(0,4);
       const sugg=[...mainSugg, ...other.filter(o=>!mainMap.has(mapKey(o)))];
-      // build a wider replacement pool for per-image dismiss (top 12 same-lang + cross-lang)
-      const _pool=[...findSuggestions(name,12),...findSuggestionsCrossLang(name,3).map(it=>({...it,otherLang:true}))];
+      // build a wide replacement pool for per-image dismiss/auto-skip-on-broken-image (top 30 same-lang + cross-lang)
+      const _pool=[...findSuggestions(name,30),...findSuggestionsCrossLang(name,8).map(it=>({...it,otherLang:true}))];
       const block={name, sugg, _baseItems:[...sugg], _pool, desc:r.desc||'', section:r.section||''}; blocks.push(block);
       // send to Gemini for ALL items when key is available (not just hard cases)
       if(useGem && gemKey) hard.push({block, name, desc:r.desc||'', section:r.section||''});
@@ -2666,6 +2666,27 @@ $('suggestBtn').addEventListener('click', async ()=>{
   }catch(err){ $('suggestProgress').innerHTML='⚠️ '+escapeHtml(err.message); }
   finally{ $('suggestBtn').disabled=false; endOp(); }
 });
+// swap out suggestion slot [bi][si] for the next unused pool candidate; removes the slot if the pool is exhausted.
+// returns true if replaced, false if removed.
+function _advanceSuggSlot(bi, si){
+  const b=state.suggestBlocks[bi]; if(!b || !b.sugg[si]) return false;
+  const mk=it=>it.id!=null?('id:'+it.id):('u:'+(it.url||it.name));
+  const gone=mk(b.sugg[si]);
+  if(!b._dismissedItems) b._dismissedItems=new Set();
+  b._dismissedItems.add(gone);
+  const inSugg=new Set(b.sugg.map(mk));
+  const pool=b._pool||[];
+  const replacement=pool.find(it=>{ const k=mk(it); return !inSugg.has(k)&&!b._dismissedItems.has(k); });
+  if(replacement){ b.sugg[si]={id:replacement.id,name:replacement.name,file:replacement.file,otherLang:!!replacement.otherLang}; return true; }
+  b.sugg.splice(si,1); return false;
+}
+// auto-fired when a suggestion thumbnail fails to load (broken/missing library image) — skip to the next candidate.
+// batches all errors that fire in the same tick into one re-render instead of one per broken image.
+let _sugErrPending=false;
+function _handleSugImgError(bi, si){
+  _advanceSuggSlot(bi, si);
+  if(!_sugErrPending){ _sugErrPending=true; setTimeout(()=>{ _sugErrPending=false; renderSuggestions(); }, 60); }
+}
 function renderSuggestions(){
   const box=$('suggestList');
   const pend=new Set(pendingMiss().map(r=>r.name));
@@ -2687,7 +2708,7 @@ function renderSuggestions(){
         </span>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">`;
-    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; const aib=it.ai?' <span class="lang-badge" style="background:rgba(120,200,120,.18);color:#8fd08f">✨AI</span>':''; html+=`<div style="text-align:center"><div style="position:relative;display:inline-block"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}"><button class="dismissOneSug" data-b="${bi}" data-s="${si}" title="استبدل بصورة تانية" style="position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:20px;padding:0;display:flex;align-items:center;justify-content:center">↻</button></div><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
+    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; const aib=it.ai?' <span class="lang-badge" style="background:rgba(120,200,120,.18);color:#8fd08f">✨AI</span>':''; html+=`<div style="text-align:center"><div style="position:relative;display:inline-block"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}" onerror="_handleSugImgError(${bi},${si})"><button class="dismissOneSug" data-b="${bi}" data-s="${si}" title="استبدل بصورة تانية" style="position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:20px;padding:0;display:flex;align-items:center;justify-content:center">↻</button></div><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
     html+=`</div></div>`;
   });
   box.innerHTML=html;
@@ -2699,51 +2720,40 @@ $('suggestList').addEventListener('click', e=>{
   const dsOne=e.target.closest('.dismissOneSug');
   if(dsOne){
     const bi=+dsOne.dataset.b, si=+dsOne.dataset.s;
-    const b=state.suggestBlocks[bi]; if(!b) return;
-    const mk=it=>it.id!=null?('id:'+it.id):('u:'+(it.url||it.name));
-    const gone=mk(b.sugg[si]);
-    if(!b._dismissedItems) b._dismissedItems=new Set();
-    b._dismissedItems.add(gone);
-    const inSugg=new Set(b.sugg.map(mk));
-    const pool=b._pool||[];
-    const replacement=pool.find(it=>{ const k=mk(it); return !inSugg.has(k)&&!b._dismissedItems.has(k); });
-    if(replacement){ b.sugg[si]={id:replacement.id,name:replacement.name,file:replacement.file,otherLang:!!replacement.otherLang}; }
-    else { b.sugg.splice(si,1); }
+    _advanceSuggSlot(bi, si);
     renderSuggestions(); return;
   }
   const secBtn=e.target.closest('.addSecSug');
   if(secBtn){
     const bi=+secBtn.dataset.bi; const b=state.suggestBlocks[bi]; if(!b||!b.section) return;
     const toggle=!b._withSection;
+    if(!toggle){
+      // toggling OFF: just restore the original suggestion set (fixed/AI-picked/cross-lang items included, untouched)
+      b.sugg=[...(b._baseItems||[])];
+      b._withSection=false;
+      renderSuggestions(); return;
+    }
     const nameLang=langOf(b.name);
     const mapKey=it=>it.id!=null?('id:'+it.id):('u:'+(it.url||it.name));
-    let lex,other;
-    if(toggle){
-      // Tiered: item name is primary, section only fills remaining slots
-      // Preserve item-specific base items (cross-lang / loose candidates) so they survive the toggle
-      const secToks=new Set(normalizeName(b.section).split(' ').filter(w=>w.length>=2&&!SUGG_STOP.has(w)));
-      const byName=findSuggestions(b.name,8,0,nameLang);
-      const boosted=byName.filter(it=>it._toks&&it._toks.some(t=>secToks.has(t)));
-      const rest=byName.filter(it=>!boosted.includes(it));
-      const merged=[...boosted,...rest];
-      const mergedKeys=new Set(merged.map(mapKey));
-      // Keep initial item-specific suggestions (loose/cross-lang) that aren't already present
-      (b._baseItems||[]).forEach(it=>{ const k=mapKey(it); if(!mergedKeys.has(k)){ merged.push(it); mergedKeys.add(k); } });
-      // Only fill remaining slots with section-only results if still fewer than 4
-      if(merged.length<4){
-        const secOnly=findSuggestions(b.section,4,0,nameLang);
-        for(const s of secOnly){ if(merged.length>=4) break; const k=mapKey(s); if(!mergedKeys.has(k)){ merged.push(s); mergedKeys.add(k); } }
-      }
-      lex=merged.slice(0,4);
-      other=findSuggestionsCrossLang(b.name,2,nameLang);
-    } else {
-      lex=findSuggestions(b.name,4,0,nameLang);
-      other=findSuggestionsCrossLang(b.name,2,nameLang);
+    // Tiered: item name is primary, section only fills remaining slots
+    // Preserve item-specific base items (cross-lang / loose candidates / fixed / AI picks) so they survive the toggle
+    const secToks=new Set(normalizeName(b.section).split(' ').filter(w=>w.length>=2&&!SUGG_STOP.has(w)));
+    const byName=findSuggestions(b.name,8,0,nameLang);
+    const boosted=byName.filter(it=>it._toks&&it._toks.some(t=>secToks.has(t)));
+    const rest=byName.filter(it=>!boosted.includes(it));
+    const merged=[...boosted,...rest];
+    const mergedKeys=new Set(merged.map(mapKey));
+    (b._baseItems||[]).forEach(it=>{ const k=mapKey(it); if(!mergedKeys.has(k)){ merged.push(it); mergedKeys.add(k); } });
+    if(merged.length<4){
+      const secOnly=findSuggestions(b.section,4,0,nameLang);
+      for(const s of secOnly){ if(merged.length>=4) break; const k=mapKey(s); if(!mergedKeys.has(k)){ merged.push(s); mergedKeys.add(k); } }
     }
-    const seen=new Map(); lex.forEach(it=>seen.set(mapKey(it),it));
-    const otherSlot=other.filter(o=>!seen.has(mapKey(o))).map(it=>({...it,otherLang:true}));
-    b.sugg=[...lex,...otherSlot].map(it=>({id:it.id,name:it.name,file:it.file,otherLang:!!it.otherLang}));
-    b._withSection=toggle;
+    const lex=merged.slice(0,4);
+    const other=findSuggestionsCrossLang(b.name,2,nameLang).map(it=>({...it,otherLang:true}));
+    const seen=new Set(lex.map(mapKey));
+    const otherSlot=other.filter(o=>!seen.has(mapKey(o)));
+    b.sugg=[...lex,...otherSlot];
+    b._withSection=true;
     renderSuggestions(); return;
   }
   const btn=e.target.closest('.acceptSug'); if(!btn) return;
