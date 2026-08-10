@@ -1024,6 +1024,10 @@ const I18N = {
   'خلصت':'Done',
   'اتولّدت':'generated',
   'فشلت':'failed',
+  // combine zip progress
+  'بجمّع الكل...':'Bundling all...',
+  'نزّل ملف فيه':'Downloaded file with',
+  'صورة (الموجودة + المستوردة)':'images (matched + imported)',
 };
 let LANG = localStorage.getItem('lang') || 'ar';
 const _origText = new WeakMap();
@@ -2199,21 +2203,30 @@ $('bulkFiles').addEventListener('change', async e=>{
   endOp();
   loadLibrary();
 });
-// combined ZIP: found library images (renamed) + imported images (renamed) in one file
+// combined ZIP: found library images (renamed) + imported images (renamed) in one file (no duplicates)
 $('combineZip').addEventListener('click', async ()=>{
   const found=(state.results||[]).filter(r=>r.type==='found');
-  const imp=Object.keys(state.imported);
-  if(!found.length && !imp.length) return;
-  $('combineZip').disabled=true; startOp(); const zip=new JSZip(); const used=new Set(); let k=0; const total=found.length+imp.length;
-  for(const row of found){ if(state.cancel) break; const cand=row.candidates[row.chosenIdx];
-    $('impProgress').textContent=`بجمّع الكل... ${++k}/${total}`;
-    const raw=await fetch(imgUrl(cand),{cache:'no-store'}).then(r=>r.blob());
-    const {blob,ext}=await maybeResize(raw, cand.name);
+  const foundNames=new Set(found.map(r=>r.name));
+  const extraImp=Object.keys(state.imported).filter(n=>!foundNames.has(n)); // imported but not yet in found
+  if(!found.length && !extraImp.length) return;
+  $('combineZip').disabled=true; startOp();
+  const zip=new JSZip(); const used=new Set(); let k=0;
+  const total=found.length+extraImp.length;
+  const prog=()=>{ $('impProgress').textContent=tr('بجمّع الكل...')+` ${++k}/${total}`; };
+  // Fetch found images in parallel batches (use imported blob when available — faster, no duplicate)
+  const CONCUR=6;
+  const toFetch=found.filter(r=>!state.imported[r.name]);
+  const blobs=new Map(); // name → {blob,ext}
+  let fi=0;
+  const worker=async()=>{ while(fi<toFetch.length){ if(state.cancel) break; const row=toFetch[fi++]; const cand=row.candidates[row.chosenIdx]; try{ const raw=await fetch(imgUrl(cand),{cache:'no-store'}).then(r=>r.blob()); blobs.set(row.name, await maybeResize(raw,cand.name)); }catch(e){blobs.set(row.name,{blob:new Blob(),ext:'.jpg'});} } };
+  await Promise.all(Array.from({length:Math.min(CONCUR,toFetch.length||1)},worker));
+  for(const row of found){ if(state.cancel) break; prog();
+    const imp=state.imported[row.name];
+    const {blob,ext}=imp?{blob:imp.blob,ext:imp.ext}:(blobs.get(row.name)||{blob:new Blob(),ext:'.jpg'});
     let n=sanitizeFile(row.outBase)+ext; if(used.has(n))n=uniqueName(used,n); used.add(n); zip.file(n,blob); }
-  for(const it of imp){ if(state.cancel) break; const e=state.imported[it]; let n=sanitizeFile(it)+e.ext; if(used.has(n))n=uniqueName(used,n); used.add(n);
-    $('impProgress').textContent=`بجمّع الكل... ${++k}/${total}`; zip.file(n, e.blob); }
-  download(await zip.generateAsync({type:'blob'}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_all_images.zip');
-  $('impProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅'} نزّل ملف فيه <b>${k}</b> صورة (الموجودة + المستوردة).`; $('combineZip').disabled=false; endOp();
+  for(const it of extraImp){ if(state.cancel) break; prog(); const e=state.imported[it]; let n=sanitizeFile(it)+e.ext; if(used.has(n))n=uniqueName(used,n); used.add(n); zip.file(n,e.blob); }
+  download(await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_all_images.zip');
+  $('impProgress').innerHTML=`${state.cancel?'⏹️ '+tr('اتوقف'):'✅'} ${tr('نزّل ملف فيه')} <b>${k}</b> ${tr('صورة (الموجودة + المستوردة)')}.`; $('combineZip').disabled=false; endOp();
 });
 
 // ----- smart suggestions: near-matches from the library for missing items (added only on confirm) -----
@@ -2422,18 +2435,18 @@ async function geminiPick(batch, key){
 // ----- fixed category images (persistent fallback suggestions by keyword) -----
 state.fixed = JSON.parse(localStorage.getItem('fixedMap')||'[]');
 function saveFixed(){ localStorage.setItem('fixedMap', JSON.stringify(state.fixed)); }
-function fixedResolve(file){ const it=(state.rawList||[]).find(x=>x.name===file); return it?it.id:null; }
+function _fixedLibItem(file){ return (state.rawList||[]).find(x=>x.name===file)||null; }
 function findFixed(name){
   const norm=normalizeName(name); const toks=new Set(norm.split(' ').filter(Boolean)); const out=[];
   for(const fx of (state.fixed||[])){
     const hit=(fx.keywords||[]).some(k=>{ const nk=normalizeName(k); return nk && (toks.has(nk) || norm.includes(nk)); });
     if(!hit) continue;
     if(fx.dataUrl) out.push({url:fx.dataUrl, name:'(ثابتة)', fixed:true});
-    else { const id=fixedResolve(fx.file); if(id!=null) out.push({id, name:fx.file, fixed:true}); }
+    else { const it=_fixedLibItem(fx.file); if(it) out.push({...it, fixed:true}); }
   }
   return out;
 }
-function fixedSrc(fx){ if(fx.dataUrl) return fx.dataUrl; const id=fixedResolve(fx.file); return id!=null?imgUrl({id}):null; }
+function fixedSrc(fx){ if(fx.dataUrl) return fx.dataUrl; const it=_fixedLibItem(fx.file); return it?imgUrl(it):null; }
 function renderFixed(){
   const box=$('fxList'); if(!box) return;
   box.innerHTML=(state.fixed||[]).map((fx,i)=>{
@@ -2862,18 +2875,19 @@ $('dlXlsx').addEventListener('click', async ()=>{ const blob=await buildSheetBlo
 // build the ZIP at download time from current choices (swapped image + renamed file)
 $('dlZip').addEventListener('click', async ()=>{
   const found=(state.results||[]).filter(r=>r.type==='found'); if(!found.length) return;
-  $('dlZip').disabled=true; startOp(); const zip=new JSZip(); const used=new Set(); let n=0;
-  for(let k=0;k<found.length;k++){
-    if(state.cancel) break;
-    const row=found[k]; const cand=row.candidates[row.chosenIdx];
-    log(LANG==='en'?`Preparing ZIP... ${k+1}/${found.length}`:`بجهّز الـ ZIP... ${k+1}/${found.length}`);
-    const raw=await fetch(imgUrl(cand),{cache:'no-store'}).then(r=>r.blob());
-    const {blob,ext}=await maybeResize(raw, cand.name);
-    let nm=sanitizeFile(row.outBase)+ext; if(used.has(nm)) nm=uniqueName(used,nm); used.add(nm);
-    zip.file(nm, blob); n++;
-  }
-  download(await zip.generateAsync({type:'blob'}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_images.zip');
-  log(state.cancel?`⏹️ اتوقف — اتحمّل ${n} صورة.`:'تم تحميل الـ ZIP ✅'); $('dlZip').disabled=false; endOp();
+  $('dlZip').disabled=true; startOp();
+  log(LANG==='en'?`Fetching ${found.length} images in parallel...`:`بجهّز ${found.length} صورة بالتوازي...`);
+  const CONCUR=6; const blobs=new Array(found.length); let fi=0;
+  const worker=async()=>{ while(fi<found.length){ if(state.cancel) break; const i=fi++; const row=found[i]; const cand=row.candidates[row.chosenIdx];
+    const imp=state.imported[row.name];
+    if(imp){ blobs[i]={blob:imp.blob,ext:imp.ext}; }
+    else{ try{ const raw=await fetch(imgUrl(cand),{cache:'no-store'}).then(r=>r.blob()); blobs[i]=await maybeResize(raw,cand.name); }catch(e){ blobs[i]={blob:new Blob(),ext:'.jpg'}; } } } };
+  await Promise.all(Array.from({length:Math.min(CONCUR,found.length)},worker));
+  const zip=new JSZip(); const used=new Set(); let n=0;
+  for(let k=0;k<found.length;k++){ if(state.cancel) break; const row=found[k]; const {blob,ext}=blobs[k]||{blob:new Blob(),ext:'.jpg'}; if(!blob.size) continue;
+    let nm=sanitizeFile(row.outBase)+ext; if(used.has(nm)) nm=uniqueName(used,nm); used.add(nm); zip.file(nm,blob); n++; }
+  download(await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_images.zip');
+  log(state.cancel?`⏹️ ${tr('اتوقف')} — ${n} ${tr('صورة')}.`:LANG==='en'?'ZIP ready ✅':'تم تحميل الـ ZIP ✅'); $('dlZip').disabled=false; endOp();
 });
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
 
