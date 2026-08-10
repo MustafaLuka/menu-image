@@ -332,6 +332,12 @@
           <label>مرادفات / كلمات بنفس المعنى (كل سطر مجموعة، الأول هو الأساسي). بتتحفظ تلقائيًا.</label>
           <textarea id="synonyms" rows="5" placeholder="dal, daal&#10;shake, milkshake&#10;ice, iced, cold"></textarea>
           <div class="hint">مثال: <code>shake, milkshake</code> يعني «milkshake» = «shake». وكمان ترتيب الكلمات مايفرقش (small water = water small).</div>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
+            <button id="synAiBtn" class="ghost">🤖 <span data-i18n="اقترح مرادفات بالـ AI">اقترح مرادفات بالـ AI</span></button>
+            <div class="hint" style="margin-top:4px" data-i18n="بيحلل كلمات الأصناف الناقصة من آخر مطابقة، ولو لقى غلطة إملائية أو كلمة قريبة من كلمة في المكتبة، بيقترحها كمرادف (يحتاج مفتاح Gemini من صفحة الإدارة).">بيحلل كلمات الأصناف الناقصة من آخر مطابقة، ولو لقى غلطة إملائية أو كلمة قريبة من كلمة في المكتبة، بيقترحها كمرادف (يحتاج مفتاح Gemini من صفحة الإدارة).</div>
+            <div id="synAiProgress" class="hint" style="margin-top:6px"></div>
+            <div id="synAiList" style="margin-top:8px"></div>
+          </div>
         </div>
 
         <!-- Fixed category images -->
@@ -1028,6 +1034,18 @@ const I18N = {
   'بجمّع الكل...':'Bundling all...',
   'نزّل ملف فيه':'Downloaded file with',
   'صورة (الموجودة + المستوردة)':'images (matched + imported)',
+  // AI synonym suggestions
+  'اقترح مرادفات بالـ AI':'Suggest synonyms via AI',
+  'بيحلل كلمات الأصناف الناقصة من آخر مطابقة، ولو لقى غلطة إملائية أو كلمة قريبة من كلمة في المكتبة، بيقترحها كمرادف (يحتاج مفتاح Gemini من صفحة الإدارة).':'Analyzes words from the last match\'s missing items, and if it finds a likely typo or close variant of a library word, suggests it as a synonym (needs a Gemini key from the Admin page).',
+  'حُط مفتاح Gemini API في صفحة الإدارة الأول.':'Add a Gemini API key on the Admin page first.',
+  'شغّل مطابقة منيو فيها أصناف ناقصة الأول.':'Run a menu match with missing items first.',
+  'بحلل الكلمات...':'Analyzing words...',
+  'مفيش كلمات قريبة من مكتبتك تحتاج مراجعة.':'No words close enough to your library to review.',
+  'بسأل Gemini على':'Asking Gemini about',
+  'كلمة':'words',
+  'Gemini مالقاش أخطاء إملائية واضحة.':'Gemini found no clear spelling matches.',
+  'لقيت':'Found',
+  'اقتراح — راجعها ودوس «أضيفها».':'suggestion(s) — review and click "Add".',
 };
 let LANG = localStorage.getItem('lang') || 'ar';
 const _origText = new WeakMap();
@@ -1117,7 +1135,14 @@ function tightKey(s){ return normalizeName(s).replace(/\s+/g,''); }
 function sortedKey(s){ const t=normalizeName(s); return t ? t.split(' ').sort().join(' ') : t; }
 function stripExt(name){ return name.replace(/\.[^.]+$/,''); }
 // editable synonym groups: first word in a line is the canonical form
-const DEFAULT_SYNONYMS = 'dal, daal\nshake, milkshake\nice, iced, cold';
+const DEFAULT_SYNONYMS = [
+  'dal, daal','shake, milkshake','ice, iced, cold',
+  'Lasagna, Lasagne','Mushroom, Mashroom','Mixed, Mix','Motabel, motabal',
+  'Humus, Hummos, Hommos','LOBIYA, Lobia','coffee, Qahwa','chicken, chicn, Ckn',
+  'Schezwan, Schez','Prawns, shirmps, shrimp, prawn','Tea, Chai, shai',
+  'WRAPS, WRAP','Tortila, Tortilla','Bhendi, BHINDI','KADAI, Kadhai',
+  'Kuruma, KURUMA','Biriyani, BIRYANI','BARBEQUE, bbq'
+].join('\n');
 let SYNONYMS = {};
 function buildSynonyms(text){
   SYNONYMS = {};
@@ -1138,7 +1163,7 @@ const GLOSSARY=[
   ['لحمة','beef'],['لحم','beef'],['بيف','beef'],
   ['خروف','lamb'],['ضأن','lamb'],['لامب','lamb'],
   ['سمك','fish'],['فيش','fish'],
-  ['جمبري','shrimp'],['روبيان','shrimp'],['قريدس','shrimp'],
+  ['جمبري','shrimp'],['روبيان','shrimp'],['قريدس','shrimp'],['شيرمب','shrimp'],
   ['كبدة','liver'],['قلوبات','gizzard'],['بط','duck'],['حمام','pigeon'],
   ['ضلع','ribs'],['ريش','ribs'],['أكتاف','wings'],['ونجز','wings'],
   ['فيليه','fillet'],['ستيك','steak'],['تركي','turkey'],['كابوريا','crab'],
@@ -1167,7 +1192,7 @@ const GLOSSARY=[
   ['بولونيز','bolognese'],['الفريدو','alfredo'],['كاربونارا','carbonara'],
   ['بنة','bun'],['كيزر','kaiser'],
   // ── bread & wraps ──
-  ['خبز','bread'],['عيش','bread'],['تورتيلا','tortilla'],
+  ['خبز','bread'],['عيش','bread'],['تورتيلا','tortilla'],['صاج','saj'],
   ['بيتا','pita'],['فرنسي','french'],['فينو','fino'],
   ['صمون','samoun'],['كروسان','croissant'],
   ['بانيه','pane'],['كرسبي','crispy'],
@@ -1435,6 +1460,110 @@ $('synonyms').addEventListener('input', ()=>{
   if(state.rawList) buildImageMaps();
 });
 loadLibrary();
+
+// ===================== AI-assisted synonym suggestions (typos / abbreviations Gemini catches, lexical matching can't) =====================
+function _levenshtein(a,b){
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){
+    const cur=[i];
+    for(let j=1;j<=n;j++) cur[j]=a[i-1]===b[j-1] ? prev[j-1] : Math.min(prev[j-1]+1, prev[j]+1, cur[j-1]+1);
+    prev=cur;
+  }
+  return prev[n];
+}
+function _libraryVocab(lang){
+  const vocab=new Set();
+  for(const item of (state.rawList||[])){
+    if(item._lang!==lang || !item._toks) continue;
+    for(const w of item._toks) if(w.length>=3) vocab.add(w);
+  }
+  return vocab;
+}
+async function _synGeminiPick(batch, gemKey){
+  let prompt='You review restaurant menu item words that failed to match an image library, looking for spelling mistakes, abbreviations, or synonyms.\n'
+    +'For EACH word, look at its candidate library words (same language) and decide if ANY of them is clearly the same word/dish, just spelled differently or abbreviated.\n'
+    +'Only pick a candidate if confident they mean the same thing (typo, abbreviation, or plural/singular of the SAME dish/ingredient) — NOT a different dish. If none match, use -1.\n'
+    +'Reply with ONLY a JSON array: [{"i":0,"c":1},{"i":1,"c":-1}]\n\n';
+  batch.forEach((b,i)=>{ prompt+=i+') "'+b.word+'" | candidates: '+b.cands.map((c,ci)=>'['+ci+'] "'+c+'"').join(' ')+'\n'; });
+  const body=JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}});
+  let lastErr;
+  for(const model of AI_TEXT_MODELS){
+    try{
+      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(gemKey);
+      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+      if(!res.ok){ lastErr=new Error('HTTP '+res.status); continue; }
+      const data=await res.json();
+      const parts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
+      const txt=(parts[0]&&parts[0].text)||'[]';
+      let arr; try{ arr=JSON.parse(txt); }catch{ const m=txt.match(/\[[\s\S]*\]/); arr=m?JSON.parse(m[0]):[]; }
+      const out=[];
+      for(const p of (arr||[])){ const b=batch[p&&p.i]; if(!b) continue; const c=b.cands[p.c]; if(c) out.push({word:b.word, canonical:c}); }
+      return out;
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr||new Error('Gemini failed');
+}
+function renderSynSuggestions(picks){
+  const box=$('synAiList');
+  box.innerHTML=picks.map((p,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;flex-wrap:wrap">
+    <span>«<b>${escapeHtml(p.word)}</b>» = «<b>${escapeHtml(p.canonical)}</b>»؟</span>
+    <button class="synAccept" data-i="${i}" style="font-size:12px;padding:4px 10px">✔ ${tr('أضيفها')}</button>
+    <button class="synReject" data-i="${i}" style="font-size:12px;padding:4px 10px;background:var(--soft);border:1px solid var(--line);color:var(--txt)">✕</button>
+  </div>`).join('');
+  box._picks=picks;
+}
+$('synAiList').addEventListener('click', e=>{
+  const acc=e.target.closest('.synAccept'), rej=e.target.closest('.synReject');
+  if(!acc && !rej) return;
+  const i=+(acc||rej).dataset.i;
+  const picks=$('synAiList')._picks||[];
+  const p=picks[i]; if(!p) return;
+  if(acc){
+    const line=`${p.canonical}, ${p.word}`;
+    const ta=$('synonyms');
+    ta.value = ta.value.trim() ? ta.value.trim()+'\n'+line : line;
+    ta.dispatchEvent(new Event('input'));
+  }
+  (acc||rej).closest('div').remove();
+});
+$('synAiBtn').addEventListener('click', async ()=>{
+  const gemKey=($('gemKey')||{value:''}).value.trim();
+  if(!gemKey){ $('synAiProgress').textContent=tr('حُط مفتاح Gemini API في صفحة الإدارة الأول.'); return; }
+  const rows=pendingMiss();
+  if(!rows.length){ $('synAiProgress').textContent=tr('شغّل مطابقة منيو فيها أصناف ناقصة الأول.'); return; }
+  $('synAiBtn').disabled=true; $('synAiProgress').textContent=tr('بحلل الكلمات...'); $('synAiList').innerHTML='';
+  try{
+    const byLang={ar:new Map(), en:new Map()};
+    for(const r of rows){
+      const lang=langOf(r.name);
+      const words=normalizeName(r.name).split(' ').filter(w=>w.length>=3 && !SUGG_STOP.has(w));
+      for(const w of words){
+        if(SYNONYMS[w] && SYNONYMS[w]!==w) continue;   // already has a mapping
+        if(!byLang[lang].has(w)) byLang[lang].set(w, r.name);
+      }
+    }
+    const batch=[];
+    for(const lang of ['ar','en']){
+      const vocab=[..._libraryVocab(lang)];
+      for(const w of byLang[lang].keys()){
+        if(vocab.includes(w)) continue;   // exact match already — nothing to fix
+        const maxDist = w.length<=4 ? 1 : (w.length<=7 ? 2 : 3);
+        const cands=vocab.filter(v=>v!==w && Math.abs(v.length-w.length)<=maxDist)
+          .map(v=>({v, d:_levenshtein(w,v)})).filter(x=>x.d<=maxDist).sort((a,b)=>a.d-b.d).slice(0,5).map(x=>x.v);
+        if(cands.length) batch.push({word:w, cands});
+      }
+    }
+    if(!batch.length){ $('synAiProgress').textContent=tr('مفيش كلمات قريبة من مكتبتك تحتاج مراجعة.'); return; }
+    $('synAiProgress').textContent=`✨ ${tr('بسأل Gemini على')} ${batch.length} ${tr('كلمة')}...`;
+    const picks=await _synGeminiPick(batch, gemKey);
+    if(!picks.length){ $('synAiProgress').textContent=tr('Gemini مالقاش أخطاء إملائية واضحة.'); return; }
+    renderSynSuggestions(picks);
+    $('synAiProgress').textContent=`✅ ${tr('لقيت')} ${picks.length} ${tr('اقتراح — راجعها ودوس «أضيفها».')}`;
+  }catch(err){ $('synAiProgress').textContent='⚠️ '+escapeHtml(err.message||String(err)); }
+  finally{ $('synAiBtn').disabled=false; }
+});
 
 // ===================== STEP 2: menu excel =====================
 $('menuFile').addEventListener('change', async e=>{
