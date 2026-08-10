@@ -2666,26 +2666,46 @@ $('suggestBtn').addEventListener('click', async ()=>{
   }catch(err){ $('suggestProgress').innerHTML='⚠️ '+escapeHtml(err.message); }
   finally{ $('suggestBtn').disabled=false; endOp(); }
 });
-// swap out suggestion slot [bi][si] for the next unused pool candidate; removes the slot if the pool is exhausted.
-// returns true if replaced, false if removed.
+// swap out suggestion slot [bi][si] for the next unused pool candidate.
+// returns the new item if replaced, or null if the pool is exhausted (slot set to null in place — array stays
+// index-stable so other slots' DOM data-b/data-s attributes never go stale without a full re-render).
 function _advanceSuggSlot(bi, si){
-  const b=state.suggestBlocks[bi]; if(!b || !b.sugg[si]) return false;
+  const b=state.suggestBlocks[bi]; if(!b || !b.sugg[si]) return null;
   const mk=it=>it.id!=null?('id:'+it.id):('u:'+(it.url||it.name));
   const gone=mk(b.sugg[si]);
   if(!b._dismissedItems) b._dismissedItems=new Set();
   b._dismissedItems.add(gone);
-  const inSugg=new Set(b.sugg.map(mk));
+  const inSugg=new Set(b.sugg.filter(Boolean).map(mk));
   const pool=b._pool||[];
   const replacement=pool.find(it=>{ const k=mk(it); return !inSugg.has(k)&&!b._dismissedItems.has(k); });
-  if(replacement){ b.sugg[si]={id:replacement.id,name:replacement.name,file:replacement.file,otherLang:!!replacement.otherLang}; return true; }
-  b.sugg.splice(si,1); return false;
+  if(replacement){ const item={id:replacement.id,name:replacement.name,file:replacement.file,otherLang:!!replacement.otherLang}; b.sugg[si]=item; return item; }
+  b.sugg[si]=null; return null;
 }
-// auto-fired when a suggestion thumbnail fails to load (broken/missing library image) — skip to the next candidate.
-// batches all errors that fire in the same tick into one re-render instead of one per broken image.
-let _sugErrPending=false;
-function _handleSugImgError(bi, si){
-  _advanceSuggSlot(bi, si);
-  if(!_sugErrPending){ _sugErrPending=true; setTimeout(()=>{ _sugErrPending=false; renderSuggestions(); }, 60); }
+function _sugBadges(it){
+  return {
+    fxb: it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':'',
+    olb: it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':'',
+    aib: it.ai?' <span class="lang-badge" style="background:rgba(120,200,120,.18);color:#8fd08f">✨AI</span>':''
+  };
+}
+// update a single suggestion slot in place (new image, or remove just that one thumbnail) — no full re-render,
+// so sibling thumbnails that already loaded fine are never touched/flashed.
+function _applySuggSlotUpdate(bi, si, imgEl){
+  const wrap=imgEl.closest('.sugSlot');
+  const item=_advanceSuggSlot(bi, si);
+  if(item){
+    imgEl.src=imgUrl(item);
+    const {fxb,olb,aib}=_sugBadges(item);
+    const cap=wrap && wrap.querySelector('.sugCap');
+    if(cap) cap.innerHTML=escapeHtml(item.name)+aib+fxb+olb;
+  } else if(wrap){
+    wrap.remove();
+  }
+}
+// auto-fired when a suggestion thumbnail fails to load (broken/missing library image) — skip to the next candidate
+// in place, without touching any other thumbnail in the list.
+function _handleSugImgError(imgEl, bi, si){
+  _applySuggSlotUpdate(bi, si, imgEl);
 }
 function renderSuggestions(){
   const box=$('suggestList');
@@ -2708,7 +2728,7 @@ function renderSuggestions(){
         </span>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">`;
-    b.sugg.forEach((it,si)=>{ const fxb=it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':''; const olb=it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':''; const aib=it.ai?' <span class="lang-badge" style="background:rgba(120,200,120,.18);color:#8fd08f">✨AI</span>':''; html+=`<div style="text-align:center"><div style="position:relative;display:inline-block"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}" onerror="_handleSugImgError(${bi},${si})"><button class="dismissOneSug" data-b="${bi}" data-s="${si}" title="استبدل بصورة تانية" style="position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:20px;padding:0;display:flex;align-items:center;justify-content:center">↻</button></div><br><span class="muted" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
+    b.sugg.forEach((it,si)=>{ if(!it) return; const {fxb,olb,aib}=_sugBadges(it); html+=`<div class="sugSlot" style="text-align:center"><div style="position:relative;display:inline-block"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}" onerror="_handleSugImgError(this,${bi},${si})"><button class="dismissOneSug" data-b="${bi}" data-s="${si}" title="استبدل بصورة تانية" style="position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:20px;padding:0;display:flex;align-items:center;justify-content:center">↻</button></div><br><span class="muted sugCap" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
     html+=`</div></div>`;
   });
   box.innerHTML=html;
@@ -2720,8 +2740,9 @@ $('suggestList').addEventListener('click', e=>{
   const dsOne=e.target.closest('.dismissOneSug');
   if(dsOne){
     const bi=+dsOne.dataset.b, si=+dsOne.dataset.s;
-    _advanceSuggSlot(bi, si);
-    renderSuggestions(); return;
+    const imgEl=dsOne.parentElement.querySelector('img');
+    if(imgEl) _applySuggSlotUpdate(bi, si, imgEl);
+    return;
   }
   const secBtn=e.target.closest('.addSecSug');
   if(secBtn){
