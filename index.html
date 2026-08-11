@@ -800,6 +800,9 @@ const I18N = {
   '📊 النتيجة':'📊 Result','إجمالي الأصناف':'Total items','لاقي لها صور':'Have images','مش موجودة':'Missing','صور في الـ ZIP':'Images in ZIP','اتظبط بإعادة الترتيب':'Fixed by reordering',
   'ضغط كل الصور عند التحميل':'Compress all images on download','KB':'KB',
   '⬇️ تحميل الشيت الملوّن (.xlsx)':'⬇️ Download the marked sheet (.xlsx)','⬇️ تحميل صور المطابقة (.zip)':'⬇️ Download matched images (.zip)',
+  '⬇️ تحميل صور المطابقة':'⬇️ Download matched images',
+  'غير متاحة':'Unavailable',
+  'كل صور المكتبة لهذا الصنف مش متاحة — محتاج صورة يدوي':'None of this item\'s library images are available — needs a manual image',
   'صورة':'Image','اسم الصنف':'Item name','الحالة':'Status','اسم الملف في الـ ZIP (للتعديل)':'File name in the ZIP (editable)','بدّل':'Swap',
   // gemini + suggestions
   '✨ الأصناف الناقصة → برومت Gemini':'✨ Missing items → Gemini prompt',
@@ -1925,13 +1928,17 @@ function _handleResultImgError(imgEl, i){
   const row=state.results[i]; if(!row || row.type!=='found' || !row.candidates.length) return;
   if(!row._triedIdx) row._triedIdx=new Set();
   row._triedIdx.add(row.chosenIdx);
-  if(row._triedIdx.size>=row.candidates.length) return;   // exhausted every candidate — leave as-is
+  if(row._triedIdx.size>=row.candidates.length){
+    // exhausted every candidate — swap the broken <img> for a clear placeholder instead of a native broken-image icon
+    imgEl.outerHTML=`<div class="thumb" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;font-size:9px;line-height:1.2;color:var(--muted)" title="${escapeAttr(tr('كل صور المكتبة لهذا الصنف مش متاحة — محتاج صورة يدوي'))}">🖼️<span>${tr('غير متاحة')}</span></div>`;
+    return;
+  }
   row.chosenIdx=(row.chosenIdx+1)%row.candidates.length;
   const cand=row.candidates[row.chosenIdx];
   imgEl.src=imgUrl(cand);
-  const tr=imgEl.closest('tr');
-  const el=tr && tr.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
-  const swBtn=tr && tr.querySelector('.swap'); if(swBtn) swBtn.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
+  const trEl=imgEl.closest('tr');
+  const el=trEl && trEl.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
+  const swBtn=trEl && trEl.querySelector('.swap'); if(swBtn) swBtn.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
 }
 function extOf(n){ const m=String(n).match(/\.[^.]+$/); return m?m[0]:'.jpg'; }
 function escapeAttr(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
