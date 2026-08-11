@@ -1906,6 +1906,20 @@ async function buildSheetBlob(){
 function refreshMissingUI(){ renderGemPrompt(); renderImport(); renderSuggestions(); }
 
 // ===================== results table: thumbnail / enlarge / swap / rename =====================
+// auto-fired when a matched thumbnail fails to load (missing library file) — cycle to the next
+// candidate for that item in place, without touching any other row.
+function _handleResultImgError(imgEl, i){
+  const row=state.results[i]; if(!row || row.type!=='found' || !row.candidates.length) return;
+  if(!row._triedIdx) row._triedIdx=new Set();
+  row._triedIdx.add(row.chosenIdx);
+  if(row._triedIdx.size>=row.candidates.length) return;   // exhausted every candidate — leave as-is
+  row.chosenIdx=(row.chosenIdx+1)%row.candidates.length;
+  const cand=row.candidates[row.chosenIdx];
+  imgEl.src=imgUrl(cand);
+  const tr=imgEl.closest('tr');
+  const el=tr && tr.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
+  const swBtn=tr && tr.querySelector('.swap'); if(swBtn) swBtn.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
+}
 function extOf(n){ const m=String(n).match(/\.[^.]+$/); return m?m[0]:'.jpg'; }
 function escapeAttr(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function renderResults(){
@@ -1920,7 +1934,7 @@ function renderResults(){
         : `<span class="muted" style="font-size:12px">الصورة الوحيدة</span>`;
       const removeBtn=`<button class="rmatch" data-i="${i}" title="احذف المطابقة — يرجع الصنف لـ ناقصة" style="background:transparent;border:1px solid rgba(236,67,64,.4);color:#ec4340;padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;margin-inline-start:4px">✕</button>`;
       tr.innerHTML=`
-        <td><img class="thumb clk" data-i="${i}" src="${imgUrl(cand)}" title="اضغط للتكبير"></td>
+        <td><img class="thumb clk" data-i="${i}" src="${imgUrl(cand)}" title="اضغط للتكبير" onerror="_handleResultImgError(this,${i})"></td>
         <td>${escapeHtml(row.name)}</td>
         <td>${badge}</td>
         <td><input class="rename" data-i="${i}" value="${escapeAttr(row.outBase)}"><span class="muted extlbl" style="font-size:12px"> ${escapeHtml(ext)}</span></td>
