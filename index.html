@@ -404,6 +404,11 @@
           <div class="card" id="aiGenUserCard">
             <h2 style="font-size:17px">🤖 <span data-i18n="توليد الصور الناقصة بالـ AI">توليد الصور الناقصة بالـ AI</span></h2>
             <div class="hint" style="margin-bottom:10px" data-i18n="بضغطة واحدة — التطبيق بيولّد صور لكل الأصناف الناقصة أوتوماتيك.">بضغطة واحدة — التطبيق بيولّد صور لكل الأصناف الناقصة أوتوماتيك.</div>
+            <label style="margin-top:0" data-i18n="💡 ما يتضاف مع اسم الصنف في البحث/التوليد:">💡 ما يتضاف مع اسم الصنف في البحث/التوليد:</label>
+            <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:10px">
+              <button class="tog-btn on" data-pmode="sec" id="pm_sec2">🏷️ <span data-i18n="اسم + القسم">اسم + القسم</span></button>
+              <button class="tog-btn" data-pmode="sec_desc" id="pm_sec_desc2">🏷️📝 <span data-i18n="اسم + القسم + الوصف">اسم + القسم + الوصف</span></button>
+            </div>
             <button id="aiGenBtn">🤖 <span data-i18n="ولّد الصور الناقصة بالـ AI">ولّد الصور الناقصة بالـ AI</span></button>
             <div id="aiGenProgress" class="hint" style="margin-top:8px"></div>
             <div id="aiGenList" class="tbl-wrap" style="display:none;max-height:260px;margin-top:8px"></div>
@@ -583,6 +588,11 @@
             <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
             <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
           </select>
+          <label style="margin-top:8px" data-i18n="💡 ما يتضاف مع اسم الصنف في البحث/التوليد:">💡 ما يتضاف مع اسم الصنف في البحث/التوليد:</label>
+          <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
+            <button class="tog-btn on" data-pmode="sec" id="pm_sec3">🏷️ <span data-i18n="اسم + القسم">اسم + القسم</span></button>
+            <button class="tog-btn" data-pmode="sec_desc" id="pm_sec_desc3">🏷️📝 <span data-i18n="اسم + القسم + الوصف">اسم + القسم + الوصف</span></button>
+          </div>
           <button id="n8nGenBtn" style="margin-top:8px" data-i18n="🤖 ولّد كل الصور الناقصة عبر n8n">🤖 ولّد كل الصور الناقصة عبر n8n</button>
           <div id="n8nGenProgress" class="hint" style="margin-top:8px"></div>
           <div id="n8nGenList" class="tbl-wrap" style="display:none;max-height:260px;margin-top:8px"></div>
@@ -888,6 +898,9 @@ const I18N = {
   '💡 ما يتضاف مع اسم الصنف في البرومت:':'💡 What to add with item name in prompt:',
   '🏷️ اسم + القسم':'🏷️ Name + Section',
   '🏷️📝 اسم + القسم + الوصف':'🏷️📝 Name + Section + Description',
+  'اسم + القسم':'Name + Section',
+  'اسم + القسم + الوصف':'Name + Section + Description',
+  '💡 ما يتضاف مع اسم الصنف في البحث/التوليد:':'💡 What to add with item name in search/generation:',
   '(بدون)':'(none)',
   // library info (dynamic)
   '⏳ بحمّل مكتبة الصور من السحابة...':'⏳ Loading image library from cloud...',
@@ -1963,7 +1976,8 @@ document.querySelectorAll('[data-pmode]').forEach(btn=>{
   btn.classList.add('pm-btn');
   btn.addEventListener('click',()=>{
     promptMode=btn.dataset.pmode;
-    document.querySelectorAll('.pm-btn').forEach(b=>b.classList.toggle('on',b===btn));
+    // several cards duplicate this toggle (Gemini prompt card, user AI-gen card, admin n8n card) — keep them all in sync by mode, not by element identity
+    document.querySelectorAll('.pm-btn').forEach(b=>b.classList.toggle('on', b.dataset.pmode===promptMode));
     renderGemPrompt();
   });
 });
