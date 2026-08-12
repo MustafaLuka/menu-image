@@ -140,8 +140,8 @@
     <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">ادخل كود الوصول عشان تكمل</p>
     <label style="display:block;text-align:start;font-size:13px;color:var(--muted);margin-bottom:4px;">كود الوصول</label>
     <input type="password" id="codeInput" placeholder="TLB_XXXXX_XXXX" autocomplete="off" style="margin-bottom:10px;">
-    <div id="emailLoginRow" style="display:none;margin-bottom:10px;">
-      <label style="display:block;text-align:start;font-size:13px;color:var(--muted);margin-bottom:4px;">إيميل @talabat.com</label>
+    <div id="emailLoginRow" style="margin-bottom:10px;">
+      <label style="display:block;text-align:start;font-size:13px;color:var(--muted);margin-bottom:4px;">إيميل @talabat.com <span style="opacity:.6">(للمستخدمين العاديين)</span></label>
       <input type="email" id="emailLoginInput" placeholder="you@talabat.com">
     </div>
     <button id="loginSubmit" style="width:100%;margin-top:4px;">دخول ←</button>
@@ -529,20 +529,11 @@
           <button id="adminLogout" class="ghost" style="margin-top:10px;font-size:12px;padding:5px 12px">↩ <span data-i18n="تسجيل الخروج">تسجيل الخروج</span></button>
         </div>
 
-        <!-- Login log (users who logged in) -->
+        <!-- Login log (users who logged in) — recorded server-side by the Worker on every /api/login call -->
         <div class="card">
           <h2>📋 <span data-i18n="سجل الدخول">سجل الدخول</span></h2>
-          <div class="hint" style="margin-bottom:10px" data-i18n="بيتسجّل كل مستخدم دخل — بيتبعت للويب هوك (لو مُضبوط) وبيظهر هنا.">بيتسجّل كل مستخدم دخل — بيتبعت للويب هوك (لو مُضبوط) وبيظهر هنا.</div>
-          <label style="font-size:12px" data-i18n="🔗 Login Webhook URL (n8n / Worker — بيستقبل: {email, date, ua})">🔗 Login Webhook URL (n8n / Worker — بيستقبل: {email, date, ua})</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <input type="text" id="loginWebhookUrl" placeholder="https://..." style="flex:1">
-            <button id="loginWebhookSave" class="ghost" style="font-size:12px;padding:5px 12px;flex-shrink:0" data-i18n="حفظ">حفظ</button>
-          </div>
-          <label style="font-size:12px;margin-top:10px" data-i18n="🔗 Log Fetch URL (GET → JSON مصفوفة دخولات)">🔗 Log Fetch URL (GET → JSON مصفوفة دخولات)</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <input type="text" id="loginFetchUrl" placeholder="https://..." style="flex:1">
-            <button id="loginFetchBtn" class="ghost" style="font-size:12px;padding:5px 12px;flex-shrink:0" data-i18n="جلب السجل">جلب السجل</button>
-          </div>
+          <div class="hint" style="margin-bottom:10px" data-i18n="بيتسجّل كل مستخدم دخل تلقائيًا على السيرفر.">بيتسجّل كل مستخدم دخل تلقائيًا على السيرفر.</div>
+          <button id="loginFetchBtn" class="ghost" data-i18n="جلب السجل">جلب السجل</button>
           <div id="loginLogTable" style="margin-top:12px"></div>
         </div>
 
@@ -556,11 +547,14 @@
           </div>
         </div>
 
-        <!-- Gemini API key -->
+        <!-- Gemini API key + model. The key row is LOCAL mode only — in CLOUD mode the key lives
+             server-side in the Worker, never in this page (row hidden via JS below). -->
         <div class="card">
           <h2>🔑 <span data-i18n="مفتاح Gemini API">مفتاح Gemini API</span></h2>
-          <label data-i18n="مفتاح Gemini API">مفتاح Gemini API</label>
-          <input type="password" id="gemKey" placeholder="الصق المفتاح من aistudio.google.com" />
+          <div id="gemKeyRow">
+            <label data-i18n="مفتاح Gemini API">مفتاح Gemini API</label>
+            <input type="password" id="gemKey" placeholder="الصق المفتاح من aistudio.google.com" />
+          </div>
           <label style="margin-top:10px" data-i18n="موديل توليد الصور">موديل توليد الصور</label>
           <input type="text" id="gemModel" />
           <div class="hint" style="margin-top:4px">Try: <code>gemini-2.0-flash-preview-image-generation</code></div>
@@ -602,15 +596,6 @@
         <div class="card" id="cloudAddBox">
           <h2>☁️ <span data-i18n="ضيف صور للمكتبة السحابية (للكل)">ضيف صور للمكتبة السحابية (للكل)</span></h2>
           <div class="hint" data-i18n="اختار صور أو فولدر أو ZIP — التطبيق يظبّط حجمها ويرفعها للسحابة.">اختار صور أو فولدر أو ZIP — التطبيق يظبّط حجمها ويرفعها للسحابة.</div>
-          <!-- Cloud endpoint (for cloud mode) -->
-          <div id="cloudEndpointWrap" style="display:none;margin-top:8px;padding:10px;background:var(--soft);border-radius:10px;border:1px solid var(--line)">
-            <label style="font-size:12px">🔗 <span data-i18n="Upload Endpoint URL (n8n / Worker)">Upload Endpoint URL (n8n / Worker)</span></label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-              <input type="text" id="cloudEndpointUrl" placeholder="https://..." style="flex:1;font-size:13px">
-              <button id="cloudEndpointSave" class="ghost" style="font-size:12px;padding:5px 10px;flex-shrink:0" data-i18n="حفظ">حفظ</button>
-            </div>
-            <div class="hint" style="margin-top:4px" data-i18n="يستقبل POST {name, b64, pull} — نفس API بتاع السيرفر المحلي.">يستقبل POST {name, b64, pull} — نفس API بتاع السيرفر المحلي.</div>
-          </div>
           <div class="row" style="align-items:flex-end;margin-top:6px">
             <div><label data-i18n="الصور (تقدر تختار كذا واحدة)">الصور (تقدر تختار كذا واحدة)</label><input type="file" id="cloudFiles" accept="image/*,.zip" multiple></div>
             <div style="flex:0 0 auto"><label data-i18n="حجم كل صورة (KB)">حجم كل صورة (KB)</label><input type="number" id="cloudKB" value="300" min="20" max="2000" style="width:90px"></div>
@@ -646,10 +631,47 @@
 
 <script>
 // ===================== AUTH + PANEL SWITCHING =====================
-const AUTH_CODES = {'TLB_ADMIN_2026':'admin','TLB_LUKA_2026':'user'};
+// Cloudflare Worker backend (see worker/README.md) — CLOUD mode only. Holds real auth codes,
+// sessions, the Gemini key, and the login log server-side instead of shipping any of that in
+// this JS. LOCAL mode (offline, served by serve.ps1) keeps its own simple code-based login and
+// per-browser Gemini key below, unchanged — it has no dependency on this Worker or the internet.
+const WORKER_BASE = 'https://menu-matcher-api.YOUR-SUBDOMAIN.workers.dev';
+const AUTH_CODES = {'TLB_ADMIN_2026':'admin','TLB_LUKA_2026':'user'}; // LOCAL-mode fallback only
 function getAuth(){ try{return JSON.parse(localStorage.getItem('tlb_auth')||'null');}catch(e){return null;} }
-function setAuth(role,email){ localStorage.setItem('tlb_auth',JSON.stringify({role,email:email||''})); }
-function clearAuth(){ localStorage.removeItem('tlb_auth'); }
+function setAuth(role,email,token){ localStorage.setItem('tlb_auth',JSON.stringify({role,email:email||''})); if(token) localStorage.setItem('tlb_sessionToken',token); }
+function clearAuth(){ localStorage.removeItem('tlb_auth'); localStorage.removeItem('tlb_sessionToken'); }
+function getSessionToken(){ return localStorage.getItem('tlb_sessionToken')||''; }
+// LOCAL mode only: no Worker/D1 to log to, so just keep a small local cache (last 100) for the admin to glance at.
+function _recordLocalLogin(email){
+  try{
+    const log=JSON.parse(localStorage.getItem('tlb_loginLog')||'[]');
+    log.unshift({email, date:new Date().toISOString(), ua:navigator.userAgent.slice(0,120)});
+    localStorage.setItem('tlb_loginLog', JSON.stringify(log.slice(0,100)));
+  }catch(e){}
+}
+// fetch wrapper for every authenticated Worker call: attaches the bearer token, and on a 401
+// clears the (now-invalid) session and drops the user back to the login gate.
+async function authFetch(path, opts){
+  opts=opts||{};
+  const headers=Object.assign({'Content-Type':'application/json'}, opts.headers||{}, {'Authorization':'Bearer '+getSessionToken()});
+  const res=await fetch(WORKER_BASE+path, Object.assign({}, opts, {headers}));
+  if(res.status===401){
+    clearAuth();
+    const gate=document.getElementById('loginGate'); if(gate) gate.classList.add('show');
+    const wrap=document.getElementById('appWrap'); if(wrap) wrap.style.display='none';
+  }
+  return res;
+}
+// unified Gemini call: CLOUD routes through the Worker proxy (no client-visible key);
+// LOCAL (offline) calls Google directly with the per-browser key pasted in Admin, as before.
+async function callGemini(model, body){
+  if(CLOUD){
+    return authFetch('/api/gemini', {method:'POST', body:JSON.stringify({model, body})});
+  }
+  const key=($('gemKey')||{value:''}).value.trim();
+  const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key);
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+}
 function applyAuth(auth){
   const gate=document.getElementById('loginGate');
   if(gate) gate.classList.remove('show');
@@ -695,43 +717,44 @@ document.addEventListener('DOMContentLoaded', function(){
   const logoutBtn=document.getElementById('logoutBtn');
   const langSwBtn=document.getElementById('langSw');
 
-  if(codeInp) codeInp.addEventListener('input',function(){
-    const role=AUTH_CODES[codeInp.value.trim()];
-    if(emailRow) emailRow.style.display=(role==='user')?'block':'none';
-    if(loginErr) loginErr.textContent='';
-  });
+  if(codeInp) codeInp.addEventListener('input',function(){ if(loginErr) loginErr.textContent=''; });
+  if(emailInp) emailInp.addEventListener('input',function(){ if(loginErr) loginErr.textContent=''; });
 
-  if(loginBtn) loginBtn.addEventListener('click',function(){
+  if(loginBtn) loginBtn.addEventListener('click', async function(){
     const code=codeInp?codeInp.value.trim():'';
-    const role=AUTH_CODES[code];
-    if(!role){ if(loginErr) loginErr.textContent=tr('كود غلط.'); return; }
-    if(role==='user'){
-      const email=(emailInp?emailInp.value.trim():'').toLowerCase();
-      if(!email.endsWith('@talabat.com')){ if(loginErr) loginErr.textContent=tr('الإيميل لازم يكون @talabat.com'); return; }
-      setAuth(role,email);
-      // fire login webhook (non-blocking)
-      _fireLoginEvent(email);
-    } else {
-      setAuth(role,'');
-    }
-    applyAuth(getAuth());
-    switchPanel('match');
-  });
-
-  function _fireLoginEvent(email){
-    const entry={email, date:new Date().toISOString(), ua:navigator.userAgent.slice(0,120)};
-    // append to local log (last 100 entries)
+    const email=(emailInp?emailInp.value.trim():'').toLowerCase();
+    if(!code){ if(loginErr) loginErr.textContent=tr('كود غلط.'); return; }
+    loginBtn.disabled=true;
     try{
-      const log=JSON.parse(localStorage.getItem('tlb_loginLog')||'[]');
-      log.unshift(entry);
-      localStorage.setItem('tlb_loginLog', JSON.stringify(log.slice(0,100)));
-    }catch(e){}
-    // POST to configured webhook
-    const hookUrl=(localStorage.getItem('tlb_loginWebhookUrl')||'').trim();
-    if(hookUrl){
-      fetch(hookUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)}).catch(()=>{});
+      if(CLOUD){
+        // real server-side validated login + session, via the Worker (no codes shipped in this JS)
+        const res=await fetch(WORKER_BASE+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,email})});
+        const data=await res.json().catch(()=>({}));
+        if(!res.ok || !data.ok){
+          if(loginErr) loginErr.textContent = (data.error==='email must be @talabat.com') ? tr('الإيميل لازم يكون @talabat.com') : tr('كود غلط.');
+          return;
+        }
+        setAuth(data.role, data.email, data.token);
+      } else {
+        // LOCAL mode: offline, no Worker reachable — same simple code check as before
+        const role=AUTH_CODES[code];
+        if(!role){ if(loginErr) loginErr.textContent=tr('كود غلط.'); return; }
+        if(role==='user'){
+          if(!email.endsWith('@talabat.com')){ if(loginErr) loginErr.textContent=tr('الإيميل لازم يكون @talabat.com'); return; }
+          setAuth(role,email);
+          _recordLocalLogin(email);
+        } else {
+          setAuth(role,'');
+        }
+      }
+      applyAuth(getAuth());
+      switchPanel('match');
+    }catch(e){
+      if(loginErr) loginErr.textContent = tr('الخدمة مش متاحة دلوقتي، جرب تاني.');
+    }finally{
+      loginBtn.disabled=false;
     }
-  }
+  });
 
   function doLogout(){
     clearAuth();
@@ -862,6 +885,8 @@ const I18N = {
   'ادخل كود الوصول عشان تكمل':'Enter your access code to continue',
   'كود الوصول':'Access code','دخول ←':'Sign in →',
   'إيميل @talabat.com':'@talabat.com email','كود غلط.':'Wrong code.',
+  '(للمستخدمين العاديين)':'(for regular users)',
+  'الخدمة مش متاحة دلوقتي، جرب تاني.':'Service unavailable right now, try again.',
   'الإيميل لازم يكون @talabat.com':'Email must be @talabat.com',
   // step labels
   'المنيو':'Menu',
@@ -1363,8 +1388,7 @@ function buildImageMaps(){
 
 // ── Gemini bulk translation ──────────────────────────────────────────────────
 async function translateLibraryToArabic(){
-  const gemKey=($('gemKey')||{value:''}).value.trim();
-  if(!gemKey){ alert('حُط مفتاح Gemini API في الخانة أعلاه الأول.'); return; }
+  if(!CLOUD && !($('gemKey')||{value:''}).value.trim()){ alert('حُط مفتاح Gemini API في الخانة أعلاه الأول.'); return; }
   const list=(state.rawList||[]).filter(it=>langOf(stripExt(it.name))==='en');
   if(!list.length){ $('bilingualProgress').textContent='مفيش صور إنجليزي في المكتبة.'; return; }
   const existing=loadBilingualCache();
@@ -1388,10 +1412,7 @@ Example input: ["Chicken Burger","Mango Juice"] → ["برجر دجاج","عصي
 Names:
 ${JSON.stringify(names)}`;
     try{
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${gemKey}`,{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.1}})
-      }).then(r=>r.json());
+      const res=await callGemini('gemini-1.5-flash-latest', {contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.1}}).then(r=>r.json());
       const text=res.candidates?.[0]?.content?.parts?.[0]?.text||'[]';
       const m=text.match(/\[[\s\S]*?\]/);
       if(m){ const arr=JSON.parse(m[0]); arr.forEach((t,j)=>{ if(t&&batch[j]) existing[String(batch[j].id)]=String(t).trim(); }); }
@@ -1497,18 +1518,17 @@ function _libraryVocab(lang){
   }
   return vocab;
 }
-async function _synGeminiPick(batch, gemKey){
+async function _synGeminiPick(batch){
   let prompt='You review restaurant menu item words that failed to match an image library, looking for spelling mistakes, abbreviations, or synonyms.\n'
     +'For EACH word, look at its candidate library words (same language) and decide if ANY of them is clearly the same word/dish, just spelled differently or abbreviated.\n'
     +'Only pick a candidate if confident they mean the same thing (typo, abbreviation, or plural/singular of the SAME dish/ingredient) — NOT a different dish. If none match, use -1.\n'
     +'Reply with ONLY a JSON array: [{"i":0,"c":1},{"i":1,"c":-1}]\n\n';
   batch.forEach((b,i)=>{ prompt+=i+') "'+b.word+'" | candidates: '+b.cands.map((c,ci)=>'['+ci+'] "'+c+'"').join(' ')+'\n'; });
-  const body=JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}});
+  const body={contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}};
   let lastErr;
   for(const model of AI_TEXT_MODELS){
     try{
-      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(gemKey);
-      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+      const res=await callGemini(model, body);
       if(!res.ok){ lastErr=new Error('HTTP '+res.status); continue; }
       const data=await res.json();
       const parts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
@@ -1545,8 +1565,7 @@ $('synAiList').addEventListener('click', e=>{
   (acc||rej).closest('div').remove();
 });
 $('synAiBtn').addEventListener('click', async ()=>{
-  const gemKey=($('gemKey')||{value:''}).value.trim();
-  if(!gemKey){ $('synAiProgress').textContent=tr('حُط مفتاح Gemini API في صفحة الإدارة الأول.'); return; }
+  if(!CLOUD && !($('gemKey')||{value:''}).value.trim()){ $('synAiProgress').textContent=tr('حُط مفتاح Gemini API في صفحة الإدارة الأول.'); return; }
   const rows=pendingMiss();
   if(!rows.length){ $('synAiProgress').textContent=tr('شغّل مطابقة منيو فيها أصناف ناقصة الأول.'); return; }
   $('synAiBtn').disabled=true; $('synAiProgress').textContent=tr('بحلل الكلمات...'); $('synAiList').innerHTML='';
@@ -1573,7 +1592,7 @@ $('synAiBtn').addEventListener('click', async ()=>{
     }
     if(!batch.length){ $('synAiProgress').textContent=tr('مفيش كلمات قريبة من مكتبتك تحتاج مراجعة.'); return; }
     $('synAiProgress').textContent=`✨ ${tr('بسأل Gemini على')} ${batch.length} ${tr('كلمة')}...`;
-    const picks=await _synGeminiPick(batch, gemKey);
+    const picks=await _synGeminiPick(batch);
     if(!picks.length){ $('synAiProgress').textContent=tr('Gemini مالقاش أخطاء إملائية واضحة.'); return; }
     renderSynSuggestions(picks);
     $('synAiProgress').textContent=`✅ ${tr('لقيت')} ${picks.length} ${tr('اقتراح — راجعها ودوس «أضيفها».')}`;
@@ -2074,24 +2093,23 @@ async function copyGem(){
 $('copyGem').addEventListener('click', async ()=>{ await copyGem(); const b=$('copyGem'); const t=b.textContent; b.textContent='✅ اتنسخ'; setTimeout(()=>b.textContent=t,1500); });
 $('openGem').addEventListener('click', async ()=>{ await copyGem(); window.open('https://gemini.google.com/app','_blank'); });
 
-// ----- automatic image generation via Gemini API (direct from the browser: works local + cloud) -----
+// ----- automatic image generation via Gemini API (LOCAL: direct from browser; CLOUD: via Worker proxy) -----
 const DEFAULT_MODEL='gemini-2.5-flash-image-preview';
 const GEN_FALLBACK='gemini-2.0-flash-preview-image-generation';
-$('gemKey').value   = localStorage.getItem('gemKey')   || '';
+if(CLOUD){ const row=$('gemKeyRow'); if(row) row.style.display='none'; } // key lives server-side in CLOUD mode
+else { $('gemKey').value = localStorage.getItem('gemKey') || ''; $('gemKey').addEventListener('input',()=>localStorage.setItem('gemKey', $('gemKey').value)); }
 $('gemModel').value = localStorage.getItem('gemModel') || DEFAULT_MODEL;
-$('gemKey').addEventListener('input',  ()=>localStorage.setItem('gemKey',   $('gemKey').value));
 $('gemModel').addEventListener('input',()=>localStorage.setItem('gemModel', $('gemModel').value));
 // Ask Gemini (image model) for ONE image for a single item. Returns a Blob or throws.
 // The image API returns one image per call, so we call once per item to get distinct images
 // (no collage). Same request shape the local backend already uses successfully.
-async function genImageBrowser(promptText, key, models){
-  const body=JSON.stringify({ contents:[{parts:[{text:promptText}]}], generationConfig:{responseModalities:['TEXT','IMAGE']} });
+async function genImageBrowser(promptText, models){
+  const body={ contents:[{parts:[{text:promptText}]}], generationConfig:{responseModalities:['TEXT','IMAGE']} };
   let lastErr;
   for(const model of models){
     if(!model) continue;
     try{
-      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
-      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+      const res=await callGemini(model, body);
       if(!res.ok){ lastErr=new Error('HTTP '+res.status+' '+(await res.text()).slice(0,160)); continue; }
       const data=await res.json();
       const parts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
@@ -2110,8 +2128,7 @@ async function genImageBrowser(promptText, key, models){
   throw lastErr||new Error('فشل التوليد');
 }
 $('genBtn').addEventListener('click', async ()=>{
-  const key=$('gemKey').value.trim();
-  if(!key){ $('genProgress').innerHTML='⚠️ حُط مفتاح Gemini API الأول (مجاني من aistudio.google.com).'; return; }
+  if(!CLOUD && !($('gemKey')||{value:''}).value.trim()){ $('genProgress').innerHTML='⚠️ حُط مفتاح Gemini API الأول (مجاني من aistudio.google.com).'; return; }
   const model=$('gemModel').value.trim()||DEFAULT_MODEL;
   const models=[model]; if(model!==GEN_FALLBACK) models.push(GEN_FALLBACK);
   const header=$('gemHeader').value||'';
@@ -2132,7 +2149,7 @@ $('genBtn').addEventListener('click', async ()=>{
     $('genProgress').textContent=`مجموعة ${g}/${groups} — بولّد ${i+1}/${rows.length}: ${it.name} ...`;
     const tr=document.createElement('tr');
     try{
-      const blob=await genImageBrowser(prompt, key, models);   // one distinct image
+      const blob=await genImageBrowser(prompt, models);   // one distinct image
       await importOne(it.name, blob);                          // resize to target KB + store (+persist if local)
       ok++;
       const imp=state.imported[it.name];
@@ -2567,7 +2584,7 @@ async function embRerank(name, items, limit=4){
   return out;
 }
 // ask Gemini (text) to pick the single best candidate per item; one batched request. returns {name:libItem}
-async function geminiPick(batch, key){
+async function geminiPick(batch){
   let prompt='You match restaurant menu item names to image file names. Context: Egyptian & Middle Eastern food delivery, Arabic+English mixed, transliteration, word-order and spelling variations common.\n'
     +'For EACH item pick the ONE candidate image that shows the SAME dish/product regardless of language or spelling differences.\n'
     +'Use the section and description fields as extra context if provided. If truly no candidate matches, use -1.\n'
@@ -2578,12 +2595,11 @@ async function geminiPick(batch, key){
     if(b.desc)    ctx+=' [desc:'+b.desc.slice(0,120)+']';
     prompt+=i+') '+ctx+' | candidates: '+b.cands.map((c,ci)=>'['+ci+'] "'+stripExt(c.name)+'"').join(' ')+'\n';
   });
-  const body=JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}});
+  const body={contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}};
   let lastErr;
   for(const model of AI_TEXT_MODELS){
     try{
-      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
-      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+      const res=await callGemini(model, body);
       if(!res.ok){ lastErr=new Error('HTTP '+res.status+' '+(await res.text()).slice(0,140)); continue; }
       const data=await res.json();
       const parts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
@@ -2622,21 +2638,8 @@ function renderFixed(){
 function blobToDataUrl(blob){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); }); }
 
 // ----- add images to the CLOUD library -----
-// In cloud mode: use a configurable upload endpoint (n8n webhook or Cloudflare Worker).
-// In local mode: POST to local /api/cloud-add + /api/cloud-push (rclone).
-(function initCloudUpload(){
-  const epWrap=$('cloudEndpointWrap');
-  if(CLOUD && epWrap) epWrap.style.display='block';
-  const saved=localStorage.getItem('tlb_cloudEndpointUrl')||'';
-  if($('cloudEndpointUrl')) $('cloudEndpointUrl').value=saved;
-  const saveBtn=$('cloudEndpointSave');
-  if(saveBtn) saveBtn.addEventListener('click',()=>{
-    const v=($('cloudEndpointUrl').value||'').trim();
-    localStorage.setItem('tlb_cloudEndpointUrl',v);
-    saveBtn.textContent=tr('✅ حُفظ');
-    setTimeout(()=>{ saveBtn.textContent=tr('حفظ'); },1500);
-  });
-})();
+// In cloud mode: POST to the Cloudflare Worker's /api/cloud-add (bearer-authenticated, admin only).
+// In local mode: POST to local /api/cloud-add + /api/cloud-push (rclone) — unchanged.
 $('cloudFolder').addEventListener('change', e=>{ const inp=$('cloudFiles'); if(e.target.checked) inp.setAttribute('webkitdirectory',''); else inp.removeAttribute('webkitdirectory'); inp.value=''; });
 $('cloudFiles').addEventListener('change', e=>{
   const files=[...e.target.files].filter(f=>/\.(jpe?g|png|webp)$/i.test(f.name));
@@ -2676,11 +2679,6 @@ async function gatherCloudImages(fileList){
   return out;
 }
 $('cloudAddBtn').addEventListener('click', async ()=>{
-  const epUrl=CLOUD ? (localStorage.getItem('tlb_cloudEndpointUrl')||'').trim() : '';
-  if(CLOUD && !epUrl){
-    $('cloudAddProgress').innerHTML='⚠️ حُط Upload Endpoint URL الأول (n8n أو Cloudflare Worker).';
-    return;
-  }
   const picked=[...$('cloudFiles').files];
   if(!picked.length){ $('cloudAddProgress').textContent='اختار صور أو ZIP الأول.'; return; }
   const kb=parseInt($('cloudKB').value)||300;
@@ -2702,9 +2700,11 @@ $('cloudAddBtn').addEventListener('click', async ()=>{
       try{
         const blob=await resizeToKB(im.file, kb, true);
         const b64=await blobToB64(blob);
-        const apiUrl=CLOUD ? epUrl : '/api/cloud-add';
-        const res=await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({name:im.name, b64, pull:(ok===0&&fail===0)})}).then(r=>r.json());
+        const payload=JSON.stringify({name:im.name, b64, pull:(ok===0&&fail===0)});
+        const res=await (CLOUD
+          ? authFetch('/api/cloud-add',{method:'POST',body:payload})
+          : fetch('/api/cloud-add',{method:'POST',headers:{'Content-Type':'application/json'},body:payload})
+        ).then(r=>r.json());
         if(!(res&&res.ok)) throw new Error((res&&res.error)||'فشل');
         ok++;
       }catch(err){ fail++; }
@@ -2755,8 +2755,9 @@ $('suggestBtn').addEventListener('click', async ()=>{
   state.dismissed=new Set();
   if(!missing.length){ $('suggestProgress').textContent=tr('مفيش أصناف ناقصة محتاجة صور.'); state.suggestBlocks=[]; renderSuggestions(); return; }
   const useEmb=$('aiEmb').checked, useGem=$('aiGem').checked;
-  const gemKey=($('gemKey').value||'').trim();
-  const gemNoKey = useGem && !gemKey;   // wanted Gemini but no key → run without it, warn at the end
+  // CLOUD mode always has a key (server-side, via the Worker); LOCAL mode needs one pasted in Admin.
+  const gemAvailable = useGem && (CLOUD || !!($('gemKey')||{value:''}).value.trim());
+  const gemNoKey = useGem && !gemAvailable;
   $('suggestBtn').disabled=true; startOp();
   const mapKey = it => it.id!=null ? ('id:'+it.id) : ('u:'+(it.url||it.name));
   try{
@@ -2787,11 +2788,11 @@ $('suggestBtn').addEventListener('click', async ()=>{
       // build a wide replacement pool for per-image dismiss/auto-skip-on-broken-image (top 30 same-lang + cross-lang)
       const _pool=[...findSuggestions(name,30),...findSuggestionsCrossLang(name,8).map(it=>({...it,otherLang:true}))];
       const block={name, sugg, _baseItems:[...sugg], _pool, desc:r.desc||'', section:r.section||''}; blocks.push(block);
-      // send to Gemini for ALL items when key is available (not just hard cases)
-      if(useGem && gemKey) hard.push({block, name, desc:r.desc||'', section:r.section||''});
+      // send to Gemini for ALL items when available (not just hard cases)
+      if(gemAvailable) hard.push({block, name, desc:r.desc||'', section:r.section||''});
     }
-    // Gemini smart pick — now for ALL items when key is available
-    if(useGem && gemKey && hard.length && !state.cancel){
+    // Gemini smart pick — now for ALL items when available
+    if(gemAvailable && hard.length && !state.cancel){
       $('suggestProgress').textContent=LANG==='en'?'✨ Asking Gemini on '+hard.length+' items...':'✨ بسأل Gemini على '+hard.length+' صنف...';
       const batch=hard.map(h=>{
         const sl=sameLangPool(h.name, 50);                          // wider same-language pool
@@ -2808,7 +2809,7 @@ $('suggestBtn').addEventListener('click', async ()=>{
       }).filter(b=>b.cands.length);
       if(batch.length){
         try{
-          const picks=await geminiPick(batch.map(b=>({name:b.name, desc:b.desc, section:b.section, cands:b.cands})), gemKey);
+          const picks=await geminiPick(batch.map(b=>({name:b.name, desc:b.desc, section:b.section, cands:b.cands})));
           for(const b of batch){
             const c=picks[b.name]; if(!c) continue;
             const cand={id:c.id, name:c.name, file:c.file, ai:true, otherLang:(langOf(stripExt(c.name))!==langOf(b.name))};
@@ -2824,7 +2825,7 @@ $('suggestBtn').addEventListener('click', async ()=>{
     if(!(($('suggestProgress').textContent||'').startsWith('⚠️'))){
       const note = gemNoKey ? ' <span style="color:#ffb38a">— ملحوظة: فعّلت ترشيح Gemini بس مفيش مفتاح؛ حُط مفتاح Gemini API فوق عشان يشتغل.</span>' : '';
       $('suggestProgress').innerHTML = (state.suggestBlocks.length
-        ? `✅ لقيت اقتراحات لـ <b>${state.suggestBlocks.length}</b> صنف من ${missing.length}${useGem&&gemKey?' (راجعتهم كلهم بـ Gemini)':''}. راجعها ودوس «أضيفها» للي يناسبك.`
+        ? `✅ لقيت اقتراحات لـ <b>${state.suggestBlocks.length}</b> صنف من ${missing.length}${gemAvailable?' (راجعتهم كلهم بـ Gemini)':''}. راجعها ودوس «أضيفها» للي يناسبك.`
         : 'مفيش اقتراحات قريبة في المكتبة.') + note;
     }
   }catch(err){ $('suggestProgress').innerHTML='⚠️ '+escapeHtml(err.message); }
@@ -3135,34 +3136,23 @@ $('emailBtn').addEventListener('click',()=>{
 });
 
 // ===================== admin: login log =====================
+// CLOUD: fetched from the Worker's D1-backed /api/log (real, shared, server-recorded on every login).
+// LOCAL: no server to ask, so just show this browser's own small cache (see _recordLocalLogin above).
 (function initLoginLog(){
-  const whSave=$('loginWebhookSave');
-  const whInp=$('loginWebhookUrl');
   const fetchBtn=$('loginFetchBtn');
-  const fetchInp=$('loginFetchUrl');
-  if(!whInp) return;
-  whInp.value=localStorage.getItem('tlb_loginWebhookUrl')||'';
-  if(fetchInp) fetchInp.value=localStorage.getItem('tlb_loginFetchUrl')||'';
-  if(whSave) whSave.addEventListener('click',()=>{
-    localStorage.setItem('tlb_loginWebhookUrl',(whInp.value||'').trim());
-    whSave.textContent='✅';
-    setTimeout(()=>{ whSave.textContent=tr('حفظ'); },1500);
-  });
-  if(fetchBtn) fetchBtn.addEventListener('click', async ()=>{
-    const url=(fetchInp?fetchInp.value:'').trim();
-    localStorage.setItem('tlb_loginFetchUrl', url);
+  if(!fetchBtn) return;
+  async function loadLog(){
     const tbl=$('loginLogTable');
     if(!tbl) return;
-    if(!url){ renderLoginLogLocal(tbl); return; }
+    if(!CLOUD){ renderLoginLogLocal(tbl); return; }
     tbl.innerHTML='<span class="muted">⏳ جاري الجلب...</span>';
     try{
-      const data=await fetch(url).then(r=>r.json());
-      renderLoginLogRows(tbl, Array.isArray(data)?data:[]);
-    }catch(e){ renderLoginLogLocal(tbl); }
-  });
-  // render local log on open
-  const tbl=$('loginLogTable');
-  if(tbl) renderLoginLogLocal(tbl);
+      const data=await authFetch('/api/log').then(r=>r.json());
+      renderLoginLogRows(tbl, (data&&data.ok&&Array.isArray(data.rows))?data.rows:[]);
+    }catch(e){ tbl.innerHTML='<span class="muted hint">⚠️ '+tr('الخدمة مش متاحة دلوقتي، جرب تاني.')+'</span>'; }
+  }
+  fetchBtn.addEventListener('click', loadLog);
+  loadLog(); // render on open
 })();
 function renderLoginLogLocal(tbl){
   try{
