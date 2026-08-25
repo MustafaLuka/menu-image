@@ -176,11 +176,9 @@
       <div class="sb-name">Talabat <span style="color:var(--accent)">By Luka</span><small>Menu Matcher</small></div>
     </div>
     <nav class="sb-nav">
-      <button class="sb-item active" data-panel="match"><span class="sb-icon">🍽️</span><span class="sb-lbl">مطابقة المنيو</span></button>
-      <button class="sb-item" data-panel="library"><span class="sb-icon">📚</span><span class="sb-lbl">المكتبة</span></button>
-      <button class="sb-item" data-panel="resize"><span class="sb-icon">🛠️</span><span class="sb-lbl">تغيير الحجم</span></button>
-      <button class="sb-item" data-panel="gemini"><span class="sb-icon">✨</span><span class="sb-lbl">AI Assistance</span><span id="sbAiBadge" class="sb-badge" style="display:none">0</span></button>
-      <button class="sb-item" data-panel="email"><span class="sb-icon">✉️</span><span class="sb-lbl">البريد</span></button>
+      <button class="sb-item active" data-panel="upload"><span class="sb-icon">📤</span><span class="sb-lbl" data-i18n="رفع المنيو">رفع المنيو</span></button>
+      <button class="sb-item" data-panel="match"><span class="sb-icon">🍽️</span><span class="sb-lbl" data-i18n="مطابقة وتوليد">مطابقة وتوليد</span><span id="sbAiBadge" class="sb-badge" style="display:none">0</span></button>
+      <button class="sb-item" data-panel="export"><span class="sb-icon">📦</span><span class="sb-lbl" data-i18n="تصدير">تصدير</span></button>
       <button class="sb-item" data-panel="admin" style="display:none;"><span class="sb-icon">⚙️</span><span class="sb-lbl">الإدارة</span></button>
     </nav>
     <div class="sb-bottom">
@@ -196,11 +194,11 @@
   <!-- ══ Main Content ══ -->
   <div id="mainContent">
 
-    <!-- ── Panel: Menu Match ── -->
-    <div id="panel-match" class="panel active">
+    <!-- ── Panel: Upload (wizard step 1) ── -->
+    <div id="panel-upload" class="panel active">
       <div class="panel-hdr">
-        <h1>🍽️ مطابقة صور المنيو</h1>
-        <p>ارفع شيت المنيو، حدّد فولدر الصور، والتطبيق هيلوّن الأصناف اللي لاقي لها صور ويجمّعها في ملف ZIP.</p>
+        <h1>📤 <span data-i18n="رفع المنيو">رفع المنيو</span></h1>
+        <p data-i18n="ارفع شيت المنيو أو الصقه، والتطبيق هيحضّر الأصناف عشان نطابقها في الخطوة الجاية.">ارفع شيت المنيو أو الصقه، والتطبيق هيحضّر الأصناف عشان نطابقها في الخطوة الجاية.</p>
       </div>
       <div class="wrap">
 
@@ -261,7 +259,21 @@
     </div>
     <div id="detectInfo" class="hint" style="margin-top:8px"></div>
     <div id="previewWrap" class="tbl-wrap preview" style="display:none;margin-top:12px"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button onclick="switchPanel('match');return false;" data-i18n="التالي: المطابقة ←">التالي: المطابقة ←</button>
+    </div>
   </div>
+
+      </div><!-- end .wrap upload -->
+    </div><!-- end #panel-upload -->
+
+    <!-- ── Panel: Match & Generate (wizard step 2) ── -->
+    <div id="panel-match" class="panel">
+      <div class="panel-hdr">
+        <h1>🍽️ <span data-i18n="مطابقة وتوليد">مطابقة وتوليد</span></h1>
+        <p data-i18n="طابِق الأصناف مع مكتبة الصور، وشوف اللي لسه ناقص واقتراحات الذكاء الاصطناعي.">طابِق الأصناف مع مكتبة الصور، وشوف اللي لسه ناقص واقتراحات الذكاء الاصطناعي.</p>
+      </div>
+      <div class="wrap">
 
   <!-- STEP 2: run -->
   <div class="card">
@@ -279,6 +291,10 @@
       </div>
     </div>
     <div id="log"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button onclick="switchPanel('library');return false;" class="ghost" style="font-size:12.5px;padding:6px 12px">⚙️ <span data-i18n="إعدادات المكتبة والمرادفات">إعدادات المكتبة والمرادفات</span></button>
+      <button onclick="switchPanel('gemini');return false;" class="ghost" style="font-size:12.5px;padding:6px 12px">✨ <span data-i18n="أدوات الذكاء الاصطناعي">أدوات الذكاء الاصطناعي</span></button>
+    </div>
   </div>
 
   <!-- RESULTS -->
@@ -305,25 +321,6 @@
       <span style="font-size:13.5px"><b id="gemMissCount" style="color:var(--accent)">0</b> صنف ناقص — الاقتراحات جاهزة بالفعل</span>
       <button onclick="switchPanel('gemini');return false;" style="padding:8px 16px;font-size:13px">✨ افتح الاقتراحات ←</button>
     </div>
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:4px 0 10px">
-      <label style="margin:0;display:flex;align-items:center;gap:6px">
-        <input type="checkbox" id="resizeOn" checked style="width:auto"> <span data-i18n="ضغط/ظبّط الصور عند التحميل">ضغط/ظبّط الصور عند التحميل</span>
-      </label>
-      <div id="dlResizeOpts" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <button class="tog-btn on" data-dm="kb"   id="dm_kb"   style="font-size:12px;padding:4px 10px">📦 KB</button>
-        <button class="tog-btn"    data-dm="dims" id="dm_dims" style="font-size:12px;padding:4px 10px">📐 <span data-i18n="أبعاد">أبعاد</span></button>
-        <span id="dlKbWrap" style="display:flex;align-items:center;gap:4px">
-          <span data-i18n="لحجم">لحجم</span> <input type="number" id="targetKB" value="300" min="50" style="width:80px"> KB
-        </span>
-        <span id="dlDimsWrap" style="display:none;align-items:center;gap:4px">
-          <input type="number" id="dlW" value="800" min="1" style="width:72px"> × <input type="number" id="dlH" value="600" min="1" style="width:72px"> px
-        </span>
-      </div>
-    </div>
-    <div class="dl">
-      <button id="dlXlsx" class="ghost">⬇️ تحميل الشيت الملوّن (.xlsx)</button>
-      <button id="dlZip" class="ghost">⬇️ تحميل صور المطابقة <span id="dlZipCount" class="notranslate" style="font-size:11px;opacity:.65"></span> (.zip)</button>
-    </div>
     <div style="display:flex;gap:8px;margin-top:14px;margin-bottom:6px;align-items:center">
       <span class="muted" style="font-size:13px">عرض:</span>
       <button class="tog-btn on" data-f="all" id="rfAll">الكل</button>
@@ -332,6 +329,9 @@
     </div>
     <div class="tbl-wrap">
       <table id="resTbl"><thead><tr><th>صورة</th><th>اسم الصنف</th><th>الحالة</th><th>اسم الملف في الـ ZIP (للتعديل)</th><th>بدّل</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button onclick="switchPanel('export');return false;" data-i18n="التالي: تصدير ←">التالي: تصدير ←</button>
     </div>
   </div>
 
@@ -386,15 +386,74 @@
       </div>
     </div><!-- end #panel-library -->
 
-    <!-- ── Panel: Resize ── -->
-    <div id="panel-resize" class="panel">
+    <!-- ── Panel: Export (wizard step 3) ── -->
+    <div id="panel-export" class="panel">
       <div class="panel-hdr">
-        <h1>🛠️ تغيير حجم الصور</h1>
-        <p>ارفع أي صور واختار الحجم — التطبيق يظبّطهم كلهم على الحجم ده وينزّلهم ZIP. مستقلة تمامًا عن المنيو.</p>
+        <h1>📦 <span data-i18n="تصدير">تصدير</span></h1>
+        <p data-i18n="نزّل الشيت الملوّن وصور المطابقة، وابعتها للمطعم.">نزّل الشيت الملوّن وصور المطابقة، وابعتها للمطعم.</p>
       </div>
       <div class="wrap">
+
         <div class="card">
-          <h2>🛠️ أداة تغيير حجم الصور</h2>
+          <h2>⬇️ <span data-i18n="تحميل النتيجة">تحميل النتيجة</span></h2>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:4px 0 10px">
+            <label style="margin:0;display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="resizeOn" checked style="width:auto"> <span data-i18n="ضغط/ظبّط الصور عند التحميل">ضغط/ظبّط الصور عند التحميل</span>
+            </label>
+            <div id="dlResizeOpts" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <button class="tog-btn on" data-dm="kb"   id="dm_kb"   style="font-size:12px;padding:4px 10px">📦 KB</button>
+              <button class="tog-btn"    data-dm="dims" id="dm_dims" style="font-size:12px;padding:4px 10px">📐 <span data-i18n="أبعاد">أبعاد</span></button>
+              <span id="dlKbWrap" style="display:flex;align-items:center;gap:4px">
+                <span data-i18n="لحجم">لحجم</span> <input type="number" id="targetKB" value="300" min="50" style="width:80px"> KB
+              </span>
+              <span id="dlDimsWrap" style="display:none;align-items:center;gap:4px">
+                <input type="number" id="dlW" value="800" min="1" style="width:72px"> × <input type="number" id="dlH" value="600" min="1" style="width:72px"> px
+              </span>
+            </div>
+          </div>
+          <div class="dl">
+            <button id="dlXlsx" class="ghost">⬇️ تحميل الشيت الملوّن (.xlsx)</button>
+            <button id="dlZip" class="ghost">⬇️ تحميل صور المطابقة <span id="dlZipCount" class="notranslate" style="font-size:11px;opacity:.65"></span> (.zip)</button>
+          </div>
+        </div>
+
+        <div class="card" id="emailCard">
+          <h2>✉️ <span data-i18n="إرسال الملف للمطعم">إرسال الملف للمطعم</span></h2>
+          <div class="hint" style="margin-bottom:12px;padding:10px;background:var(--soft);border-radius:10px;border:1px solid var(--line)">
+            <b>📋 <span data-i18n="خطوتين بس:">خطوتين بس:</span></b>
+            <ol style="margin:6px 0 0;padding-inline-start:18px;line-height:1.9">
+              <li data-i18n="حمّل الملف (زرار الشيت أو الـ ZIP فوق)">حمّل الملف (زرار الشيت أو الـ ZIP فوق)</li>
+              <li data-i18n="اضغط «فتح البريد» وهو هيفتح إيميل جاهز — ضيف الملف يدويًا وابعت">اضغط «فتح البريد» وهو هيفتح إيميل جاهز — ضيف الملف يدويًا وابعت</li>
+            </ol>
+          </div>
+          <div class="row">
+            <div>
+              <label data-i18n="إيميلك (من)">إيميلك (من)</label>
+              <input type="email" id="emailFrom" placeholder="you@talabat.com">
+            </div>
+            <div>
+              <label data-i18n="المرسل إليه">المرسل إليه</label>
+              <input type="email" id="emailTo" placeholder="restaurant@example.com">
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <label data-i18n="الموضوع">الموضوع</label>
+            <input type="text" id="emailSubject" value="صور المنيو — Menu Images">
+          </div>
+          <div style="margin-top:8px">
+            <label data-i18n="نص الرسالة (تقدر تعدّله)">نص الرسالة (تقدر تعدّله)</label>
+            <textarea id="emailBody" rows="5"></textarea>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+            <button id="emailDownloadBtn" class="ghost">⬇️ <span data-i18n="حمّل الشيت">حمّل الشيت</span></button>
+            <button id="emailBtn">✉️ <span data-i18n="فتح البريد">فتح البريد</span></button>
+          </div>
+          <div id="emailHint" class="hint" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <h2>🛠️ <span data-i18n="أداة تغيير حجم الصور">أداة تغيير حجم الصور</span></h2>
+          <div class="hint" style="margin-bottom:8px" data-i18n="أداة مستقلة — غيّر حجم أي صور مش مرتبطة بالمنيو.">أداة مستقلة — غيّر حجم أي صور مش مرتبطة بالمنيو.</div>
           <div style="display:flex;gap:8px;margin-top:6px;margin-bottom:4px">
             <button class="tog-btn on" data-m="kb" id="rsm_kb">📦 بالحجم (KB)</button>
             <button class="tog-btn" data-m="dims" id="rsm_dims">📐 بالأبعاد (W×H px)</button>
@@ -413,8 +472,9 @@
           </div>
           <div id="rsProgress" class="hint" style="margin-top:6px"></div>
         </div>
+
       </div>
-    </div><!-- end #panel-resize -->
+    </div><!-- end #panel-export -->
 
     <!-- ── Panel: AI Assistance ── -->
     <div id="panel-gemini" class="panel">
@@ -506,53 +566,6 @@
         </div><!-- end #gemBox -->
       </div>
     </div><!-- end #panel-gemini -->
-
-    <!-- ── Panel: Email ── -->
-    <div id="panel-email" class="panel">
-      <div class="panel-hdr">
-        <h1>✉️ <span data-i18n="إرسال الملف النهائي">إرسال الملف النهائي</span></h1>
-        <p data-i18n="حمّل الملف النهائي وابعته للمطعم.">حمّل الملف النهائي وابعته للمطعم.</p>
-      </div>
-      <div class="wrap">
-        <div class="card" id="emailCard">
-          <h2>✉️ <span data-i18n="إرسال الملف للمطعم">إرسال الملف للمطعم</span></h2>
-          <div class="hint" style="margin-bottom:12px;padding:10px;background:var(--soft);border-radius:10px;border:1px solid var(--line)">
-            <b>📋 <span data-i18n="خطوتين بس:">خطوتين بس:</span></b>
-            <ol style="margin:6px 0 0;padding-inline-start:18px;line-height:1.9">
-              <li data-i18n="حمّل الملف (زرار الشيت أو الـ ZIP في صفحة المطابقة)">حمّل الملف (زرار الشيت أو الـ ZIP في صفحة المطابقة)</li>
-              <li data-i18n="اضغط «فتح البريد» وهو هيفتح إيميل جاهز — ضيف الملف يدويًا وابعت">اضغط «فتح البريد» وهو هيفتح إيميل جاهز — ضيف الملف يدويًا وابعت</li>
-            </ol>
-          </div>
-          <div class="row">
-            <div>
-              <label data-i18n="إيميلك (من)">إيميلك (من)</label>
-              <input type="email" id="emailFrom" placeholder="you@talabat.com">
-            </div>
-            <div>
-              <label data-i18n="المرسل إليه">المرسل إليه</label>
-              <input type="email" id="emailTo" placeholder="restaurant@example.com">
-            </div>
-          </div>
-          <div style="margin-top:8px">
-            <label data-i18n="الموضوع">الموضوع</label>
-            <input type="text" id="emailSubject" value="صور المنيو — Menu Images">
-          </div>
-          <div style="margin-top:8px">
-            <label data-i18n="نص الرسالة (تقدر تعدّله)">نص الرسالة (تقدر تعدّله)</label>
-            <textarea id="emailBody" rows="5"></textarea>
-          </div>
-          <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
-            <button id="emailDownloadBtn" class="ghost">⬇️ <span data-i18n="حمّل الشيت">حمّل الشيت</span></button>
-            <button id="emailBtn">✉️ <span data-i18n="فتح البريد">فتح البريد</span></button>
-          </div>
-          <div id="emailHint" class="hint" style="margin-top:8px"></div>
-        </div>
-        <div class="card" style="text-align:center;color:var(--muted);font-size:13px;" id="emailNoResults">
-          <p data-i18n="شغّل مطابقة منيو الأول عشان تبعت النتيجة بالبريد.">شغّل مطابقة منيو الأول عشان تبعت النتيجة بالبريد.</p>
-          <button onclick="switchPanel('match');return false;" class="ghost" style="margin-top:8px">← <span data-i18n="افتح مطابقة المنيو">افتح مطابقة المنيو</span></button>
-        </div>
-      </div>
-    </div><!-- end #panel-email -->
 
     <!-- ── Panel: Admin ── -->
     <div id="panel-admin" class="panel">
@@ -795,7 +808,7 @@ document.addEventListener('DOMContentLoaded', function(){
         }
       }
       applyAuth(getAuth());
-      switchPanel('match');
+      switchPanel('upload');
     }catch(e){
       if(loginErr) loginErr.textContent = tr('الخدمة مش متاحة دلوقتي، جرب تاني.');
     }finally{
@@ -822,6 +835,8 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 function switchPanel(name){
+  // Export is a wizard step that needs a match result to export — bounce back rather than show an empty page
+  if(name==='export' && !(state.results && state.results.length)) name='match';
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   const target=document.getElementById('panel-'+name);
   if(target) target.classList.add('active');
@@ -834,6 +849,21 @@ function switchPanel(name){
 // Source-keyed: keys are the exact trimmed Arabic text as it appears in the markup.
 // Anything not in the map stays Arabic (graceful). Dynamic/data areas are left as-is.
 const I18N = {
+  // wizard restructure (Upload / Match & Generate / Export)
+  'رفع المنيو':'Upload Menu',
+  'مطابقة وتوليد':'Match & Generate',
+  'تصدير':'Export',
+  'ارفع شيت المنيو أو الصقه، والتطبيق هيحضّر الأصناف عشان نطابقها في الخطوة الجاية.':'Upload the menu sheet or paste it in, and the app will prep the items to match in the next step.',
+  'التالي: المطابقة ←':'Next: Match →',
+  'طابِق الأصناف مع مكتبة الصور، وشوف اللي لسه ناقص واقتراحات الذكاء الاصطناعي.':'Match items against the image library, then review what is still missing and see AI-suggested matches.',
+  'إعدادات المكتبة والمرادفات':'Library & synonym settings',
+  'أدوات الذكاء الاصطناعي':'AI assistance tools',
+  'التالي: تصدير ←':'Next: Export →',
+  'نزّل الشيت الملوّن وصور المطابقة، وابعتها للمطعم.':'Download the marked sheet and matched images, and send them to the restaurant.',
+  'تحميل النتيجة':'Download result',
+  'أداة تغيير حجم الصور':'Image resizer tool',
+  'أداة مستقلة — غيّر حجم أي صور مش مرتبطة بالمنيو.':'A standalone tool — resize any images unrelated to the menu.',
+  'حمّل الملف (زرار الشيت أو الـ ZIP فوق)':'Download the file (the sheet or ZIP button above)',
   // topbar / hero / login
   '🍽️ مطابقة صور المنيو':'🍽️ Menu Image Matcher',
   'ارفع شيت المنيو، حدّد فولدر الصور، والتطبيق هيلوّن الأصناف اللي لاقي لها صور ويجمّعها في ملف ZIP.':'Upload the menu sheet, point to your image folder, and the app flags items that have images and bundles them into a ZIP.',
