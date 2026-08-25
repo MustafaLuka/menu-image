@@ -106,6 +106,19 @@
   .stat{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}
   .stat .box{flex:1;min-width:130px;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:12px;text-align:center}
   .stat .box b{display:block;font-size:26px}
+  /* ── Bento-grid dashboard cards ── */
+  .bento-grid{display:grid;gap:14px;grid-template-columns:repeat(4,1fr);margin:8px 0 16px}
+  .bento-card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);
+    border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow-sm);
+    display:flex;flex-direction:column;gap:4px;min-width:0}
+  .bento-card .bc-icon{font-size:17px;line-height:1}
+  .bento-card .bc-value{font-size:26px;font-weight:800;line-height:1.15}
+  .bento-card .bc-label{font-size:12px;color:var(--muted);font-weight:600}
+  .bento-card.ok .bc-value{color:var(--green)}
+  .bento-card.warn .bc-value{color:var(--red)}
+  .bento-card.accent .bc-value{color:var(--accent)}
+  @media(max-width:900px){.bento-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.bento-grid{grid-template-columns:1fr}}
   table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
   th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right}
   th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--card)}
@@ -271,12 +284,20 @@
   <!-- RESULTS -->
   <div class="card" id="resultCard" style="display:none">
     <h2>📊 النتيجة</h2>
-    <div class="stat">
+    <div class="stat" style="display:none">
       <div class="box"><b id="cTotal">0</b><span class="muted">إجمالي الأصناف</span></div>
       <div class="box"><b id="cFound" style="color:var(--green)">0</b><span class="muted">لاقي لها صور</span></div>
       <div class="box"><b id="cMiss" style="color:var(--red)">0</b><span class="muted">مش موجودة</span></div>
       <div class="box"><b id="cImgs">0</b><span class="muted">صور في الـ ZIP</span></div>
       <div class="box"><b id="cReorder" style="color:var(--accent)">0</b><span class="muted">اتظبط بإعادة الترتيب</span></div>
+    </div>
+    <div class="bento-grid">
+      <div class="bento-card"><span class="bc-icon">📋</span><b class="bc-value" id="bTotal">0</b><span class="bc-label">إجمالي الأصناف</span></div>
+      <div class="bento-card ok"><span class="bc-icon">✔️</span><b class="bc-value" id="bFound">0</b><span class="bc-label">لاقي لها صور</span></div>
+      <div class="bento-card warn"><span class="bc-icon">✘</span><b class="bc-value" id="bMiss">0</b><span class="bc-label">مش موجودة</span></div>
+      <div class="bento-card accent"><span class="bc-icon">✨</span><b class="bc-value" id="bSuggested">0</b><span class="bc-label">مطابقة بالاقتراح الذكي</span></div>
+      <div class="bento-card"><span class="bc-icon">🔀</span><b class="bc-value" id="bReorder">0</b><span class="bc-label">اتظبط بإعادة الترتيب</span></div>
+      <div class="bento-card"><span class="bc-icon">🖼️</span><b class="bc-value" id="bImgs">0</b><span class="bc-label">صور في الـ ZIP</span></div>
     </div>
     <div id="gemMissLink" style="display:none;margin:4px 0 14px;padding:12px 16px;border-radius:11px;
       background:rgba(255,90,0,.12);border:1px solid rgba(255,90,0,.3);display:flex;align-items:center;
@@ -1977,6 +1998,7 @@ $('runBtn').addEventListener('click', async ()=>{
   // dashboard + results table (images fetched lazily as thumbnails / at ZIP download)
   $('cTotal').textContent=found+miss; $('cFound').textContent=found; $('cMiss').textContent=miss;
   $('cImgs').textContent=found; $('cReorder').textContent=reorderedCount;
+  renderDashboard();
   renderResults();
 
   // missing-items Gemini prompt + import (state.results is the single source of truth)
@@ -2071,6 +2093,22 @@ function _handleResultImgError(imgEl, i){
 }
 function extOf(n){ const m=String(n).match(/\.[^.]+$/); return m?m[0]:'.jpg'; }
 function escapeAttr(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+// Bento-grid dashboard: reads state.results/state.suggestBlocks directly (no separate
+// aggregation state) so it always reflects whatever the legacy #cTotal/#cFound/... spans
+// were just set to, plus the "suggested" count those spans never tracked.
+function renderDashboard(){
+  const results = state.results || [];
+  const found = results.filter(r=>r.type==='found').length;
+  const miss = results.filter(r=>r.type==='miss').length;
+  const suggested = results.filter(r=>r.type==='found' && r.suggested).length;
+  const reordered = results.filter(r=>r.type==='found' && r.reordered).length;
+  $('bTotal').textContent = found+miss;
+  $('bFound').textContent = found;
+  $('bMiss').textContent = miss;
+  $('bSuggested').textContent = suggested;
+  $('bReorder').textContent = reordered;
+  $('bImgs').textContent = found;
+}
 function renderResults(){
   const tb=$('resTbl').querySelector('tbody'); tb.innerHTML='';
   state.results.forEach((row,i)=>{
@@ -2148,6 +2186,7 @@ $('resTbl').addEventListener('click', e=>{
     state.suggestBlocks=looseBlocks;
     const f=state.results.filter(r=>r.type==='found').length, m=state.results.filter(r=>r.type==='miss').length;
     $('cFound').textContent=f; $('cMiss').textContent=m; $('cImgs').textContent=f;
+    renderDashboard();
     $('gemBox').style.display=m>0?'block':'none';
     const _gml=$('gemMissLink'); if(_gml) _gml.style.display=m>0?'block':'none';
     renderResults(); refreshMissingUI();
@@ -3199,6 +3238,7 @@ function acceptSuggestion(name, cand){
   if(!changed) return;
   const f=state.results.filter(r=>r.type==='found').length, m=state.results.filter(r=>r.type==='miss').length;
   $('cFound').textContent=f; $('cMiss').textContent=m; $('cImgs').textContent=f;
+  renderDashboard();
   renderResults(); refreshMissingUI();   // sheet, prompt, import list, suggestions all reflect it
   $('dlZip').disabled = f===0; $('combineZip').disabled = f===0; updateDlZipCount();
 }
