@@ -1958,6 +1958,78 @@ function maybeEnableRun(){
   $('runBtn').disabled = !(state.workbook && state.images.count>0 && $('colSel').value);
 }
 
+// ===================== structural category-header detection =====================
+// Some menus have no dedicated category/section column at all — a section title like
+// "المقبلات" / "STARTERS" is just another row sharing the item-name column, with every other
+// cell on that row blank. No single signal is reliable alone, so this scores several and
+// requires a threshold. Rows scoring >=3 are treated as headers: excluded from the item loop,
+// and their text becomes the running category for subsequent rows (until the next header).
+// Only runs when there's no explicit sectionCol — an explicit column always wins.
+const CATEGORY_KEYWORDS = /\b(starters?|appetizers?|mains?|main course|desserts?|drinks?|beverages?|salads?|soups?|sandwiches?|breakfast|combos?|sides?|extras?|kids?)\b|مقبلات|أطباق( رئيسية)?|حلويات|مشروبات|سلطات|شوربات|ساندوتش|ساندويتش|فطار|كومبو|إضافات|أصناف/i;
+function detectCategoryHeaders(ws, hr, col, sectionCol){
+  const headerRows=new Set(), rowCategory=new Map();
+  if(sectionCol) return {headerRows, rowCategory};   // an explicit column already covers this
+  const mergedRows=new Set();
+  try{ (ws.model && ws.model.merges || []).forEach(range=>{
+    const m=String(range).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+    if(m && m[2]===m[4]) mergedRows.add(parseInt(m[2]));
+  }); }catch(e){}
+  // guess a "price" column: the column (other than the name column) whose non-empty values are
+  // mostly numeric — a blank price cell alongside a populated name cell is a common header tell
+  let priceCol=0, bestNumeric=0;
+  const totalCols=Math.max(ws.columnCount||0, col);
+  for(let c=1;c<=totalCols;c++){
+    if(c===col) continue;
+    let numeric=0, nonEmpty=0;
+    for(let r=hr+1;r<=ws.rowCount;r++){
+      const v=cellText(ws.getRow(r).getCell(c).value).trim(); if(!v) continue;
+      nonEmpty++; if(/^\d+([.,]\d+)?$/.test(v.replace(/[^\d.,]/g,''))) numeric++;
+    }
+    if(nonEmpty>=4 && numeric/nonEmpty>0.6 && numeric>bestNumeric){ bestNumeric=numeric; priceCol=c; }
+  }
+  // text frequency in the name column (a section title almost never repeats; dish names/combos can)
+  const nameFreq=new Map();
+  for(let r=hr+1;r<=ws.rowCount;r++){
+    const t=cellText(ws.getRow(r).getCell(col).value).trim().toLowerCase(); if(!t) continue;
+    nameFreq.set(t, (nameFreq.get(t)||0)+1);
+  }
+  // modal fill color of the name column across data rows, as a rough baseline for "distinct fill"
+  const fillCounts=new Map();
+  for(let r=hr+1;r<=ws.rowCount;r++){
+    const argb=ws.getRow(r).getCell(col).fill && ws.getRow(r).getCell(col).fill.fgColor && ws.getRow(r).getCell(col).fill.fgColor.argb;
+    if(!argb) continue;
+    fillCounts.set(argb, (fillCounts.get(argb)||0)+1);
+  }
+  let modalFill=null, modalCount=0;
+  fillCounts.forEach((n,k)=>{ if(n>modalCount){ modalCount=n; modalFill=k; } });
+
+  let currentCategory='';
+  for(let r=hr+1; r<=ws.rowCount; r++){
+    const row=ws.getRow(r); if(row.actualCellCount===0) continue;
+    const cell=row.getCell(col);
+    const text=cellText(cell.value).trim();
+    if(!text) continue;
+
+    let score=0;
+    if(mergedRows.has(r)) score+=3;
+    let otherColsBlank=true;
+    row.eachCell({includeEmpty:false},(c,ci)=>{ if(ci!==col) otherColsBlank=false; });
+    if(otherColsBlank) score+=2;
+    if(priceCol && !cellText(row.getCell(priceCol).value).trim()) score+=2;
+    const bold = !!(cell.font && cell.font.bold);
+    const fillArgb = cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb;
+    if(bold || (fillArgb && modalFill && fillArgb!==modalFill)) score+=2;
+    const wordCount=text.split(/\s+/).filter(Boolean).length;
+    const isAllCapsLatin = /[A-Z]/.test(text) && /^[A-Z0-9 &'\-]+$/.test(text);
+    if(wordCount<=4 && (isAllCapsLatin || CATEGORY_KEYWORDS.test(text))) score+=2;
+    if((nameFreq.get(text.toLowerCase())||0)<=1) score+=1;
+
+    if(score>=3){ headerRows.add(r); currentCategory=text; }
+    else { rowCategory.set(r, currentCategory); }
+  }
+  return {headerRows, rowCategory};
+}
+
 // ===================== STEP 3: match & build outputs =====================
 const GREEN='FFC6EFCE', GREEN_TX='FF1B7A43', RED='FFFFC7CE', RED_TX='FF9C0006';
 
@@ -1981,6 +2053,8 @@ $('runBtn').addEventListener('click', async ()=>{
     if(!sectionCol && /section|category|قسم|تصنيف|فئة/i.test(h) && !/\bid\b|كود/i.test(h)) sectionCol=ci;
   });
   const descCol = $('colDesc') ? (parseInt($('colDesc').value)||0) : 0;
+  // catch category titles that leaked into the item-name column itself (no dedicated column)
+  const cats = detectCategoryHeaders(ws, hr, col, sectionCol);
 
   // Build a FRESH output workbook (copy the menu values) instead of rewriting the
   // original file. Round-tripping the original through ExcelJS makes Excel flag it as
@@ -2006,6 +2080,7 @@ $('runBtn').addEventListener('click', async ()=>{
 
   for(let r=hr+1; r<=ws.rowCount; r++){
     if(state.cancel) break;                 // STOP button pressed
+    if(cats.headerRows.has(r)) continue;    // a detected category title, not a menu item — skip entirely
     const row=ws.getRow(r); if(row.actualCellCount===0) continue;
     const name=cellText(row.getCell(col).value).trim();
     if(!name) continue;
@@ -2049,7 +2124,7 @@ $('runBtn').addEventListener('click', async ()=>{
       // if a loose cross-lang candidate exists, store it so the suggestions panel can show it first
       const looseCandidates = (res.loose && res.list.length) ? res.list : [];
       state.results.push({type:'miss', name, row:r,
-        section: sectionCol ? cellText(row.getCell(sectionCol).value).trim() : '',
+        section: sectionCol ? cellText(row.getCell(sectionCol).value).trim() : (cats.rowCategory.get(r)||''),
         desc: descCol ? cellText(row.getCell(descCol).value).trim() : '',
         alt: col2 ? cellText(row.getCell(col2).value).trim() : '',
         looseCandidates});   // other-language name (for the 5th suggestion)
@@ -2102,9 +2177,12 @@ $('runBtn').addEventListener('click', async ()=>{
   $('dlZip').disabled = found===0; updateDlZipCount();
   $('resultCard').style.display='block';
   $('resultCard').scrollIntoView({behavior:'smooth'});
-  endRun(LANG==='en'
+  const catNote = cats.headerRows.size
+    ? (LANG==='en' ? ` (${cats.headerRows.size} category headings auto-detected in the name column and skipped)` : ` (${cats.headerRows.size} عنوان تصنيف اتعرف عليه في عمود الاسم واستُبعد)`)
+    : '';
+  endRun((LANG==='en'
     ? (state.cancel ? `Stopped ⏹️ — processed ${found+miss} items.` : `Done ✅ — ${found} found, ${miss} missing.`)
-    : (state.cancel ? `اتوقف ⏹️ — اتعالج ${found+miss} صنف لحد ما وقفت.` : `خلصت ✅  — ${found} لاقي لها صور، ${miss} مش موجودة.`));
+    : (state.cancel ? `اتوقف ⏹️ — اتعالج ${found+miss} صنف لحد ما وقفت.` : `خلصت ✅  — ${found} لاقي لها صور، ${miss} مش موجودة.`)) + catNote);
   setResFilter('all');
   if(typeof showEmailCard==='function') showEmailCard();
   applyLang(LANG); // re-translate any dynamically added text nodes
