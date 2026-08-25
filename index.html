@@ -319,6 +319,7 @@
       <div class="bento-card accent"><span class="bc-icon">✨</span><b class="bc-value" id="bSuggested">0</b><span class="bc-label">مطابقة بالاقتراح الذكي</span></div>
       <div class="bento-card"><span class="bc-icon">🔀</span><b class="bc-value" id="bReorder">0</b><span class="bc-label">اتظبط بإعادة الترتيب</span></div>
       <div class="bento-card"><span class="bc-icon">🖼️</span><b class="bc-value" id="bImgs">0</b><span class="bc-label">صور في الـ ZIP</span></div>
+      <div class="bento-card accent"><span class="bc-icon">🔄</span><b class="bc-value" id="bSync">0</b><span class="bc-label">تحتاج مزامنة مع المكتبة</span></div>
     </div>
     <div id="gemMissLink" style="display:none;margin:4px 0 14px;padding:12px 16px;border-radius:11px;
       background:rgba(255,90,0,.12);border:1px solid rgba(255,90,0,.3);display:flex;align-items:center;
@@ -657,6 +658,16 @@
           <div id="n8nGenList" class="tbl-wrap" style="display:none;max-height:260px;margin-top:8px"></div>
         </div>
 
+        <!-- Library sync (n8n) — admin only -->
+        <div class="card">
+          <h2>🔄 <span data-i18n="مزامنة المكتبة (n8n)">مزامنة المكتبة (n8n)</span></h2>
+          <div class="hint" style="margin-bottom:10px" data-i18n="أي صورة معتمدة/مسمّاة/مولّدة أثناء المطابقة بتتحط في قائمة انتظار. الزرار ده بيبعتها لـ n8n workflow عشان يزامنها مع المكتبة المركزية.">أي صورة معتمدة/مسمّاة/مولّدة أثناء المطابقة بتتحط في قائمة انتظار. الزرار ده بيبعتها لـ n8n workflow عشان يزامنها مع المكتبة المركزية.</div>
+          <label>🔗 n8n Webhook URL (Production)</label>
+          <input type="text" id="librarySyncWebhookUrl" placeholder="https://your-instance.app.n8n.cloud/webhook/menu-matcher-library-sync">
+          <button id="librarySyncBtn" style="margin-top:8px">🔄 <span data-i18n="مزامنة الآن">مزامنة الآن</span> (<span id="librarySyncCount">0</span>)</button>
+          <div id="librarySyncProgress" class="hint" style="margin-top:8px"></div>
+        </div>
+
         <!-- Cloud image upload — admin only -->
         <div class="card" id="cloudAddBox">
           <h2>☁️ <span data-i18n="ضيف صور للمكتبة السحابية (للكل)">ضيف صور للمكتبة السحابية (للكل)</span></h2>
@@ -854,6 +865,19 @@ function switchPanel(name){
 // Source-keyed: keys are the exact trimmed Arabic text as it appears in the markup.
 // Anything not in the map stays Arabic (graceful). Dynamic/data areas are left as-is.
 const I18N = {
+  // library sync flagging (Phase 5)
+  'يحتاج مزامنة':'needs sync',
+  'تحتاج مزامنة مع المكتبة':'Needs library sync',
+  'مزامنة المكتبة (n8n)':'Library sync (n8n)',
+  'أي صورة معتمدة/مسمّاة/مولّدة أثناء المطابقة بتتحط في قائمة انتظار. الزرار ده بيبعتها لـ n8n workflow عشان يزامنها مع المكتبة المركزية.':'Any image approved, renamed, or generated during matching is queued. This button sends the queue to an n8n workflow to sync it into the shared library.',
+  'مزامنة الآن':'Sync now',
+  'حُط رابط n8n webhook الأول.':'Set the n8n webhook URL first.',
+  'مفيش حاجة محتاجة مزامنة دلوقتي.':'Nothing needs syncing right now.',
+  'بيزامن':'Syncing',
+  'اتزامن':'Synced',
+  'فشل':'failed',
+  'جرب تاني بعدين.':'Try again later.',
+  'صنف بنجاح.':'item(s) successfully.',
   // inline drag-and-drop row image override
   'اتحطت صورة لـ: ':'Image set for: ',
   'فشل رفع الصورة: ':'Failed to upload image: ',
@@ -2045,6 +2069,7 @@ $('runBtn').addEventListener('click', async ()=>{
 
   // missing-items Gemini prompt + import (state.results is the single source of truth)
   state.imported = {};
+  state.syncQueue = [];
   // auto-populate suggestions for ALL missing items (lexical, instant, no button needed)
   state.suggestBlocks = (state.results||[]).filter(r=>r.type==='miss').map(r=>{
     // prefer loose cross-lang candidates if available, else run lexical findSuggestions
@@ -2150,6 +2175,7 @@ function renderDashboard(){
   $('bSuggested').textContent = suggested;
   $('bReorder').textContent = reordered;
   $('bImgs').textContent = found;
+  const sync=$('bSync'); if(sync) sync.textContent = (state.syncQueue||[]).length;
 }
 function renderResults(){
   const tb=$('resTbl').querySelector('tbody'); tb.innerHTML='';
@@ -2157,7 +2183,7 @@ function renderResults(){
     const tr=document.createElement('tr'); tr.className=row.type==='found'?'found':'miss';
     if(row.type==='found'){
       const cand=row.candidates[row.chosenIdx]; const ext=extOf(cand.name); const n=row.candidates.length;
-      const badge=`<span class="pill ok">✔ موجودة</span>${row.fallback?' <span class="lang-badge lang-en">لغة تانية</span>':''}${row.reordered?' <span class="lang-badge lang-ar">ترتيب</span>':''}${row.suggested?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">مقترح</span>':''}`;
+      const badge=`<span class="pill ok">✔ موجودة</span>${row.fallback?' <span class="lang-badge lang-en">لغة تانية</span>':''}${row.reordered?' <span class="lang-badge lang-ar">ترتيب</span>':''}${row.suggested?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">مقترح</span>':''}${row.needsSync?' <span class="lang-badge sync-pill" style="background:rgba(255,90,0,.18);color:var(--accent)">🔄 يحتاج مزامنة</span>':''}`;
       const swap = n>1
         ? `<button class="swap" data-i="${i}">🔄 بدّل (${row.chosenIdx+1}/${n})</button>`
         : `<span class="muted" style="font-size:12px">الصورة الوحيدة</span>`;
@@ -2241,7 +2267,21 @@ $('resTbl').addEventListener('click', e=>{
   const im=e.target.closest('.thumb.clk'); if(im){ showPreview(+im.dataset.i); }
 });
 $('resTbl').addEventListener('input', e=>{
-  const rn=e.target.closest('.rename'); if(rn){ state.results[+rn.dataset.i].outBase = rn.value; }
+  const rn=e.target.closest('.rename'); if(!rn) return;
+  const row=state.results[+rn.dataset.i]; row.outBase = rn.value;
+  // a rename that differs from the plain sanitized item name is worth flagging for library sync
+  // (best-effort: rows that got an auto dedupe suffix like " (2)" may also flag here — harmless).
+  // Update the badge cell in place rather than calling renderResults() — a full re-render would
+  // rebuild this very input and steal focus mid-keystroke.
+  const isRename = rn.value.trim().toLowerCase() !== sanitizeFile(row.name).trim().toLowerCase();
+  if(isRename && !row._syncedRename){
+    row._syncedRename=true; row.needsSync=true;
+    queueSync({itemName:row.name, action:'renamed', sourceLibraryId: row.candidates?.[row.chosenIdx]?.id ?? null, newFileName: rn.value});
+    const badgeTd=rn.closest('tr')?.children[2];
+    if(badgeTd && !badgeTd.querySelector('.sync-pill')){
+      badgeTd.insertAdjacentHTML('beforeend', ' <span class="lang-badge sync-pill" style="background:rgba(255,90,0,.18);color:var(--accent)">🔄 '+tr('يحتاج مزامنة')+'</span>');
+    }
+  }
 });
 
 // ===================== inline drag-and-drop / click-to-browse image override per row =====================
@@ -2257,7 +2297,8 @@ async function applyRowImage(i, file){
       await importOne(row.name, file);
       const blob=state.imported[row.name].blob;
       row.candidates=[{url:URL.createObjectURL(blob), name:row.name}];
-      row.chosenIdx=0; row.overridden=true;
+      row.chosenIdx=0; row.overridden=true; row.needsSync=true;
+      queueSync({itemName:row.name, action:'uploaded', blob});
       renderResults();
     }
     log(tr('اتحطت صورة لـ: ')+row.name);
@@ -2407,7 +2448,7 @@ $('genBtn').addEventListener('click', async ()=>{
       await importOne(it.name, blob);                          // resize to target KB + store (+persist if local)
       ok++;
       const imp=state.imported[it.name];
-      acceptSuggestion(it.name, {url:URL.createObjectURL(imp.blob), name:it.name});   // mark found everywhere -> dashboard "ناقص" count drops live
+      acceptSuggestion(it.name, {url:URL.createObjectURL(imp.blob), name:it.name}, 'generated');   // mark found everywhere -> dashboard "ناقص" count drops live
       tr.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill ok">✔ اتولّدت (${Math.round(imp.blob.size/1024)}KB)</span></td><td class="impThumb"><img class="thumb" src="${URL.createObjectURL(imp.blob)}"></td>`;
     }catch(err){ fail++; tr.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml(String(err.message||err).slice(0,140))}</td>`; }
     tb.appendChild(tr);
@@ -2445,7 +2486,7 @@ async function _runN8nGenerate(url, model, progressEl, listEl, btnEl){
       await importOne(it.name, blob);
       ok++;
       const imp=state.imported[it.name];
-      acceptSuggestion(it.name, {url:URL.createObjectURL(imp.blob), name:it.name});
+      acceptSuggestion(it.name, {url:URL.createObjectURL(imp.blob), name:it.name}, 'generated');
       row.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill ok">✔ اتولّدت (${Math.round(imp.blob.size/1024)}KB)</span></td><td class="impThumb"><img class="thumb" src="${URL.createObjectURL(imp.blob)}"></td>`;
     }catch(err){ fail++; row.innerHTML=`<td>${escapeHtml(it.name)}</td><td><span class="pill no">✘ فشلت</span></td><td class="muted">${escapeHtml(String(err.message||err).slice(0,140))}</td>`; }
     tb.appendChild(row);
@@ -2474,6 +2515,46 @@ $('n8nGenBtn').addEventListener('click', async ()=>{
   if(!url){ $('n8nGenProgress').innerHTML='⚠️ حُط رابط n8n webhook الأول.'; return; }
   const model=$('n8nModel').value;
   await _runN8nGenerate(url, model, $('n8nGenProgress'), $('n8nGenList'), $('n8nGenBtn'));
+});
+
+// ----- library sync (n8n): push queued approved/renamed/generated/uploaded images to the shared library -----
+$('librarySyncWebhookUrl').value = localStorage.getItem('librarySyncWebhookUrl') || '';
+$('librarySyncWebhookUrl').addEventListener('input', ()=>localStorage.setItem('librarySyncWebhookUrl', $('librarySyncWebhookUrl').value));
+$('librarySyncBtn').addEventListener('click', async ()=>{
+  const url=$('librarySyncWebhookUrl').value.trim();
+  const prog=$('librarySyncProgress');
+  if(!url){ prog.innerHTML='⚠️ '+tr('حُط رابط n8n webhook الأول.'); return; }
+  const pending=(state.syncQueue||[]).filter(e=>e.status==='pending');
+  if(!pending.length){ prog.textContent=tr('مفيش حاجة محتاجة مزامنة دلوقتي.'); return; }
+  $('librarySyncBtn').disabled=true;
+  const CHUNK=20; let done=0, failed=0;
+  for(let i=0;i<pending.length;i+=CHUNK){
+    const batch=pending.slice(i,i+CHUNK);
+    prog.textContent=`🔄 ${tr('بيزامن')}... ${Math.min(i+CHUNK,pending.length)}/${pending.length}`;
+    try{
+      const payload=await Promise.all(batch.map(async e=>({
+        clientId:e.clientId, itemName:e.itemName, action:e.action,
+        sourceLibraryId:e.sourceLibraryId, newFileName:e.newFileName,
+        b64: e.blob ? await blobToB64(e.blob) : null,
+        hash: e.blob ? await sha256Hex(e.blob) : null,
+      })));
+      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:payload})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok || data.ok===false) throw new Error(data.error||('HTTP '+res.status));
+      batch.forEach(e=>{ e.status='synced'; e.blob=null; }); done+=batch.length;
+    }catch(err){ batch.forEach(e=>e.status='failed'); failed+=batch.length; }
+  }
+  const badge=$('librarySyncCount'); if(badge) badge.textContent=state.syncQueue.filter(e=>e.status==='pending').length;
+  // clear the row-level "needs sync" pill once every queued entry for that item is synced
+  (state.results||[]).forEach(row=>{
+    const stillPending=(state.syncQueue||[]).some(e=>e.itemName===row.name && e.status!=='synced');
+    if(row.needsSync && !stillPending) row.needsSync=false;
+  });
+  renderResults(); renderDashboard();
+  prog.innerHTML = failed
+    ? `⚠️ ${tr('اتزامن')} <b>${done}</b>، ${tr('فشل')} <b>${failed}</b> — ${tr('جرب تاني بعدين.')}`
+    : `✅ ${tr('اتزامن')} <b>${done}</b> ${tr('صنف بنجاح.')}`;
+  $('librarySyncBtn').disabled=false;
 });
 
 // ----- smart matching via Claude (n8n): text-tier pick from candidate names, escalate to vision when unsure -----
@@ -2535,6 +2616,7 @@ $('claudeMatchBtn').addEventListener('click', async ()=>{
 
 // ----- import Gemini-downloaded images: resize ~220KB, rename to item, save to library + ZIP -----
 state.imported = {};
+state.syncQueue = [];
 function blobToB64(blob){
   return blob.arrayBuffer().then(buf=>{
     const b=new Uint8Array(buf); let s=''; const c=0x8000;
@@ -3332,20 +3414,43 @@ async function useOwnImage(name, file){
   }catch(err){ $('suggestProgress').textContent='فشل: '+err.message; }
 }
 // promote EVERY occurrence of this item name from miss -> found (so it applies across the whole menu)
-function acceptSuggestion(name, cand){
+function acceptSuggestion(name, cand, action){
   let changed=false;
   state.results.forEach((r,idx)=>{
     if(r.type==='miss' && r.name===name){
-      state.results[idx]={type:'found', name, candidates:[cand], chosenIdx:0, outBase:sanitizeFile(name), fallback:false, reordered:false, suggested:true, row:r.row};
+      state.results[idx]={type:'found', name, candidates:[cand], chosenIdx:0, outBase:sanitizeFile(name), fallback:false, reordered:false, suggested:true, needsSync:true, row:r.row};
       changed=true;
     }
   });
   if(!changed) return;
+  // flag for the (future) library-sync automation: new asset (has a blob, no library id) vs
+  // an existing library image the operator merely approved for this menu (has cand.id, no blob).
+  queueSync({itemName:name, action: action || (state.imported[name] ? 'uploaded' : 'approved'),
+    sourceLibraryId: cand.id!=null?cand.id:null, blob: state.imported[name]?.blob||null});
   const f=state.results.filter(r=>r.type==='found').length, m=state.results.filter(r=>r.type==='miss').length;
   $('cFound').textContent=f; $('cMiss').textContent=m; $('cImgs').textContent=f;
   renderDashboard();
   renderResults(); refreshMissingUI();   // sheet, prompt, import list, suggestions all reflect it
   $('dlZip').disabled = f===0; $('combineZip').disabled = f===0; updateDlZipCount();
+}
+// ===================== flag-for-library-sync queue (Phase 5) =====================
+// Purely client-side bookkeeping of what changed this session (approved/uploaded/generated/
+// renamed/overridden), so an admin-triggered sync can push it to the shared library later.
+// SHA-256 is computed lazily (only for entries that carry a real blob) so an admin can dedupe
+// against the library's hash index without re-hashing on the server.
+async function sha256Hex(blob){
+  try{
+    const buf=await blob.arrayBuffer();
+    const digest=await crypto.subtle.digest('SHA-256', buf);
+    return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return null; }
+}
+function queueSync({itemName, action, sourceLibraryId=null, newFileName=null, blob=null}){
+  const entry={clientId:'sq_'+Math.random().toString(36).slice(2)+Date.now().toString(36),
+    itemName, action, sourceLibraryId, newFileName, blob, status:'pending', queuedAt:Date.now()};
+  state.syncQueue.push(entry);
+  const badge=$('librarySyncCount'); if(badge) badge.textContent=state.syncQueue.filter(e=>e.status==='pending').length;
+  return entry;
 }
 
 // returns { list:[...matches], tier:'exact'|'tight'|'sorted'|null }
