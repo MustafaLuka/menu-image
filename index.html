@@ -35,6 +35,8 @@
   .sb-item:hover{background:var(--soft);color:var(--txt);filter:none;}
   .sb-item.active{background:rgba(255,96,0,.14);color:var(--accent);border-color:rgba(255,96,0,.22);}
   .sb-icon{font-size:16px;flex-shrink:0;}
+  .sb-badge{margin-inline-start:auto;background:var(--accent);color:#fff;font-size:10.5px;font-weight:800;
+    border-radius:20px;padding:1px 7px;line-height:1.5;}
   .sb-bottom{padding:12px 8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;}
   .sb-user{font-size:11.5px;color:var(--muted);padding:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   #mainContent{flex:1;overflow-y:auto;min-width:0;}
@@ -162,7 +164,7 @@
       <button class="sb-item active" data-panel="match"><span class="sb-icon">🍽️</span><span class="sb-lbl">مطابقة المنيو</span></button>
       <button class="sb-item" data-panel="library"><span class="sb-icon">📚</span><span class="sb-lbl">المكتبة</span></button>
       <button class="sb-item" data-panel="resize"><span class="sb-icon">🛠️</span><span class="sb-lbl">تغيير الحجم</span></button>
-      <button class="sb-item" data-panel="gemini"><span class="sb-icon">✨</span><span class="sb-lbl">AI Assistance</span></button>
+      <button class="sb-item" data-panel="gemini"><span class="sb-icon">✨</span><span class="sb-lbl">AI Assistance</span><span id="sbAiBadge" class="sb-badge" style="display:none">0</span></button>
       <button class="sb-item" data-panel="email"><span class="sb-icon">✉️</span><span class="sb-lbl">البريد</span></button>
       <button class="sb-item" data-panel="admin" style="display:none;"><span class="sb-icon">⚙️</span><span class="sb-lbl">الإدارة</span></button>
     </nav>
@@ -274,6 +276,12 @@
       <div class="box"><b id="cImgs">0</b><span class="muted">صور في الـ ZIP</span></div>
       <div class="box"><b id="cReorder" style="color:var(--accent)">0</b><span class="muted">اتظبط بإعادة الترتيب</span></div>
     </div>
+    <div id="gemMissLink" style="display:none;margin:4px 0 14px;padding:12px 16px;border-radius:11px;
+      background:rgba(255,96,0,.12);border:1px solid rgba(255,96,0,.3);display:flex;align-items:center;
+      gap:10px;flex-wrap:wrap;justify-content:space-between">
+      <span style="font-size:13.5px"><b id="gemMissCount" style="color:var(--accent)">0</b> صنف ناقص — الاقتراحات جاهزة بالفعل</span>
+      <button onclick="switchPanel('gemini');return false;" style="padding:8px 16px;font-size:13px">✨ افتح الاقتراحات ←</button>
+    </div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:4px 0 10px">
       <label style="margin:0;display:flex;align-items:center;gap:6px">
         <input type="checkbox" id="resizeOn" checked style="width:auto"> <span data-i18n="ضغط/ظبّط الصور عند التحميل">ضغط/ظبّط الصور عند التحميل</span>
@@ -302,7 +310,6 @@
     <div class="tbl-wrap">
       <table id="resTbl"><thead><tr><th>صورة</th><th>اسم الصنف</th><th>الحالة</th><th>اسم الملف في الـ ZIP (للتعديل)</th><th>بدّل</th></tr></thead><tbody></tbody></table>
     </div>
-    <div id="gemMissLink" style="display:none;margin-top:14px" class="hint">✨ فيه أصناف ناقصة — <a href="#" onclick="switchPanel('gemini');return false;" style="color:var(--accent)">افتح بانيل Gemini</a> لتوليد صورها أوتوماتيك.</div>
   </div>
 
       </div><!-- end .wrap match -->
@@ -453,6 +460,16 @@
           </div>
 
           <div class="card">
+            <h3 style="margin:0 0 8px;font-size:15px">🧠 مطابقة ذكية بالـ Claude</h3>
+            <div class="hint" style="margin-bottom:10px">بيبعت كل صنف عنده اقتراحات لـ n8n workflow، وClaude بيختار أفضل مرشح بالاسم (رخيص وسريع)، ولو مش متأكد بيشوف الصور فعليًا (Claude Sonnet) قبل ما يقرر. القبول بيحصل بس لو الثقة عالية — غير كده الصنف يفضل للمراجعة اليدوية.</div>
+            <label>🔗 رابط n8n Webhook (Production URL)</label>
+            <input type="text" id="claudeWebhookUrl" placeholder="https://your-instance.app.n8n.cloud/webhook/menu-matcher-match-item">
+            <button id="claudeMatchBtn" style="margin-top:8px">🧠 طابق الأصناف الغامضة بالذكاء الاصطناعي</button>
+            <div id="claudeMatchProgress" class="hint" style="margin-top:8px"></div>
+            <div id="claudeMatchList" class="tbl-wrap" style="display:none;max-height:260px;margin-top:8px"></div>
+          </div>
+
+          <div class="card">
             <h3 style="margin:0 0 8px;font-size:15px">🤖 اقتراحات ذكية</h3>
             <div class="hint">التطبيق يدوّر في المكتبة عن صور ممكن تكون لنفس الأصناف الناقصة (تطابق تقريبي).</div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 4px;font-size:12px">
@@ -545,6 +562,13 @@
             <button id="bilingualBtn" class="ghost" data-i18n="🌐 ترجمة المكتبة للعربي (مرة واحدة)">🌐 ترجمة المكتبة للعربي (مرة واحدة)</button>
             <button id="bilingualClear" class="ghost" style="font-size:12px;padding:4px 10px;display:none" title="حذف الترجمات المحفوظة">✕ <span data-i18n="مسح الترجمة">مسح الترجمة</span></button>
           </div>
+          <label style="margin-top:10px" data-i18n="🔗 رابط n8n Webhook لتوليد الوصف (batch)">🔗 رابط n8n Webhook لتوليد الوصف (batch)</label>
+          <input type="text" id="descWebhookUrl" placeholder="https://your-instance.app.n8n.cloud/webhook/menu-matcher-describe-batch">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <button id="descBtn" class="ghost" data-i18n="🧠 توليد وصف للمكتبة (مرة واحدة)">🧠 توليد وصف للمكتبة (مرة واحدة)</button>
+            <button id="descClear" class="ghost" style="font-size:12px;padding:4px 10px;display:none" title="حذف الأوصاف المحفوظة">✕ <span data-i18n="مسح الوصف">مسح الوصف</span></button>
+          </div>
+          <div id="descProgress" class="hint" style="margin-top:6px;display:none"></div>
         </div>
 
         <!-- Gemini API key + model. The key row is LOCAL mode only — in CLOUD mode the key lives
@@ -599,7 +623,7 @@
           <div class="row" style="align-items:flex-end;margin-top:6px">
             <div><label data-i18n="الصور (تقدر تختار كذا واحدة)">الصور (تقدر تختار كذا واحدة)</label><input type="file" id="cloudFiles" accept="image/*,.zip" multiple></div>
             <div style="flex:0 0 auto"><label data-i18n="حجم كل صورة (KB)">حجم كل صورة (KB)</label><input type="number" id="cloudKB" value="300" min="20" max="2000" style="width:90px"></div>
-            <div style="flex:0 0 auto"><button id="cloudAddBtn">☁️ <span data-i18n="ضيف وارفع">ضيف وارفع</span></button></div>
+            <div style="flex:0 0 auto"><button id="cloudAddBtn" style="padding:14px 28px;font-size:16px;font-weight:700">☁️ <span data-i18n="ضيف وارفع">ضيف وارفع</span></button></div>
           </div>
           <div id="cloudBilingualWrap" style="margin-top:8px;display:none">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1357,6 +1381,7 @@ function saveBilingualCache(map){ try{ localStorage.setItem(bilingualCacheKey(),
 function buildImageMaps(){
   const list = state.rawList || [];
   const biCache = loadBilingualCache();   // {id: "arabic name"} from Gemini bulk translation
+  const descCache = loadDescCache();      // {id: "ar desc / en desc"} from Gemini bulk description
   const normMap=new Map(), tightMap=new Map(), sortedMap=new Map(); let ar=0, en=0;
   const add=(map,lang,key,item)=>{ if(!key) return; const k=lang+'|'+key; if(!map.has(k)) map.set(k,[]); map.get(k).push(item); };
   const indexPart=(lang,base,item)=>{
@@ -1372,6 +1397,7 @@ function buildImageMaps(){
     const lang = langOf(primary); if(lang==='ar') ar++; else en++;
     item._lang = lang;
     item._toks = parts.flatMap(p=>normalizeName(p).split(' ').filter(w=>w.length>=2));
+    item._desc = descCache[String(item.id)] || '';
     // index every explicit name part
     for(const p of parts) indexPart(langOf(p), p, item);
     // bilingual name (English images → Arabic, Arabic images → English)
@@ -1452,6 +1478,85 @@ async function loadBilingualFile(){
     }
   }catch(e){}
 }
+
+// ── Gemini bulk image descriptions (id + short bilingual description per library image) ──────
+// Same one-time/cached pattern as the bilingual translation above, but instead of just the
+// Arabic name it asks for a richer searchable description (regional aliases, visible toppings/
+// ingredients, distinguishing details) so the smart pickers (geminiPick, Claude-via-n8n match)
+// can match menu items that don't share any word with the image filename
+// (e.g. "منقوشة" → a "Tannour Bread" image).
+// Generation goes through the user's own n8n workflow (batched) — no personal Gemini API key
+// needed. Contract: POST {items:[{id,name}]} → {ok:true, results:[{id,a,e}]}, matched back by id
+// (not array position, since the workflow may reorder/drop items).
+function descCacheKey(){ return 'imgDescriptions_v1_' + (state.rawList||[]).length; }
+function loadDescCache(){ try{ const s=localStorage.getItem(descCacheKey()); return s?JSON.parse(s):{}; }catch(e){ return {}; } }
+function saveDescCache(map){ try{ localStorage.setItem(descCacheKey(), JSON.stringify(map)); }catch(e){} }
+$('descWebhookUrl').value = localStorage.getItem('descWebhookUrl') || '';
+$('descWebhookUrl').addEventListener('input', ()=>localStorage.setItem('descWebhookUrl', $('descWebhookUrl').value));
+async function generateLibraryDescriptions(){
+  const url=$('descWebhookUrl').value.trim();
+  if(!url){ $('descProgress').style.display='block'; $('descProgress').innerHTML='⚠️ حُط رابط n8n webhook الأول.'; return; }
+  const list=(state.rawList||[]);
+  if(!list.length){ $('descProgress').textContent='المكتبة فاضية.'; return; }
+  const existing=loadDescCache();
+  const todo=list.filter(it=>!existing[String(it.id)]);
+  if(!todo.length){
+    $('descProgress').style.display='block';
+    $('descProgress').textContent='✅ المكتبة كلها متوصّفة بالفعل ('+Object.keys(existing).length+' صورة).';
+    return;
+  }
+  const BATCH=80;
+  let done=0;
+  const prog=$('descProgress');
+  prog.style.display='block';
+  for(let i=0;i<todo.length;i+=BATCH){
+    if(state.cancel) break;
+    const batch=todo.slice(i,i+BATCH);
+    prog.textContent=`🧠 بيولّد أوصاف... ${Math.min(i+BATCH,todo.length)}/${todo.length} صورة`;
+    const items=batch.map(it=>({id:it.id, name:stripExt(it.name)}));
+    try{
+      const res=await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items})});
+      let data; try{ data=await res.json(); }catch(e){ throw new Error('رد n8n مش JSON صالح (HTTP '+res.status+')'); }
+      if(!res.ok || !data.ok) throw new Error(data.error||('HTTP '+res.status));
+      for(const d of (data.results||[])){
+        if(!d || d.id==null) continue;
+        const a=(d.a||'').trim(), e=(d.e||'').trim();
+        if(a||e) existing[String(d.id)] = [a,e].filter(Boolean).join(' / ');
+      }
+    }catch(e){ prog.textContent='⚠️ خطأ: '+e.message; break; }
+    done+=batch.length;
+    saveDescCache(existing);
+  }
+  prog.innerHTML=`✅ اتوصّفت <b>${done}</b> صورة وتُحفظت. الترشيح بالـ Gemini/Claude دلوقتي بيفهم من الوصف مش بس اسم الصورة. `;
+  buildImageMaps();  // rebuild so item._desc is attached
+  $('descClear').style.display='';
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const btn=$('descBtn'), clr=$('descClear');
+  if(btn) btn.addEventListener('click', generateLibraryDescriptions);
+  if(clr) clr.addEventListener('click',()=>{
+    localStorage.removeItem(descCacheKey());
+    $('descProgress').textContent='✕ الأوصاف المحفوظة اتمسحت.';
+    clr.style.display='none';
+    buildImageMaps();
+  });
+  if(Object.keys(loadDescCache()).length>0 && clr) clr.style.display='';
+});
+async function loadDescFile(){
+  // load pre-built {id:"ar / en"} descriptions generated offline — no API key needed
+  try{
+    const url = CLOUD ? (R2_BASE+'/descriptions.json') : 'cloud_images/descriptions.json';
+    const res = await fetch(url, {cache:'force-cache'});
+    if(!res.ok) return;
+    const data = await res.json();
+    if(data && typeof data==='object'){
+      const existing = loadDescCache();
+      saveDescCache(Object.assign({}, data, existing)); // existing wins (user edits take priority)
+      const count = Object.keys(data).length;
+      if(count > 0){ $('descClear').style.display=''; }
+    }
+  }catch(e){}
+}
 function _setImgInfo(html){ $('imgInfo').innerHTML=html; const el=document.getElementById('imgInfoAdmin'); if(el) el.innerHTML=html; }
 function renderLibraryStatus(){
   if(!state.rawList) return;
@@ -1476,6 +1581,7 @@ async function loadLibrary(){
     const list = await res.json(); // local: [{id,name}]  cloud: [{id,name,file}]
     state.rawList = list;
     await loadBilingualFile();  // load pre-built translations before building maps
+    await loadDescFile();       // load pre-built descriptions before building maps
     buildImageMaps();
     const x = state.images;
     renderLibraryStatus();
@@ -1895,7 +2001,9 @@ $('runBtn').addEventListener('click', async ()=>{
   refreshMissingUI();
   $('impZip').disabled = true; $('combineZip').disabled = found===0; $('impProgress').textContent='';
   $('gemBox').style.display = miss>0 ? 'block' : 'none';
-  const _gml=$('gemMissLink'); if(_gml) _gml.style.display=miss>0?'block':'none';
+  const _gml=$('gemMissLink'); if(_gml) _gml.style.display=miss>0?'flex':'none';
+  const _gmc=$('gemMissCount'); if(_gmc) _gmc.textContent=miss;
+  const _sab=$('sbAiBadge'); if(_sab){ _sab.style.display=miss>0?'inline-block':'none'; _sab.textContent=miss; }
   const _gnr=$('gemNoResults'); if(_gnr) _gnr.style.display=miss>0?'none':'block';
   const _emr=document.getElementById('emailNoResults'); if(_emr) _emr.style.display=miss>=0?'none':'block';
   const _emc=document.getElementById('emailCard'); if(_emc) _emc.style.display=miss>=0?'block':'none';
@@ -2220,6 +2328,63 @@ $('n8nGenBtn').addEventListener('click', async ()=>{
   if(!url){ $('n8nGenProgress').innerHTML='⚠️ حُط رابط n8n webhook الأول.'; return; }
   const model=$('n8nModel').value;
   await _runN8nGenerate(url, model, $('n8nGenProgress'), $('n8nGenList'), $('n8nGenBtn'));
+});
+
+// ----- smart matching via Claude (n8n): text-tier pick from candidate names, escalate to vision when unsure -----
+$('claudeWebhookUrl').value = localStorage.getItem('claudeWebhookUrl') || '';
+$('claudeWebhookUrl').addEventListener('input', ()=>localStorage.setItem('claudeWebhookUrl', $('claudeWebhookUrl').value));
+async function fetchImageAsSmallB64(url, maxDim=320){
+  const blob = await (await fetch(url, {cache:'no-store'})).blob();
+  const objUrl = URL.createObjectURL(blob);
+  const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error('صورة غير صالحة')); i.src=objUrl; });
+  URL.revokeObjectURL(objUrl);
+  const scale = Math.min(1, maxDim/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.max(1,Math.round(img.naturalWidth*scale)), h=Math.max(1,Math.round(img.naturalHeight*scale));
+  const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+  const outBlob = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.7));
+  return { base64: await blobToB64(outBlob), mime:'image/jpeg' };
+}
+$('claudeMatchBtn').addEventListener('click', async ()=>{
+  const url=$('claudeWebhookUrl').value.trim();
+  if(!url){ $('claudeMatchProgress').innerHTML='⚠️ حُط رابط n8n webhook الأول.'; return; }
+  const dis=state.dismissed||(state.dismissed=new Set());
+  const blocks=(state.suggestBlocks||[]).filter(b=>(b.sugg||[]).length && !dis.has(b.name));
+  if(!blocks.length){ $('claudeMatchProgress').textContent=tr('مفيش أصناف عندها اقتراحات محتاجة مطابقة.'); return; }
+  $('claudeMatchBtn').disabled=true; startOp();
+  const list=$('claudeMatchList'); list.style.display='block';
+  list.innerHTML='<table><tbody></tbody></table>'; const tb=list.querySelector('tbody');
+  let ok=0, review=0, fail=0;
+  for(let i=0;i<blocks.length;i++){
+    if(state.cancel) break;
+    const b=blocks[i];
+    $('claudeMatchProgress').textContent=`بطابق ${i+1}/${blocks.length}: ${b.name} ...`;
+    const tr=document.createElement('tr');
+    try{
+      const mapKey=it=>it.id!=null?it.id:(it.url||it.name);
+      const candidates=(b.sugg||[]).slice(0,5).map(it=>({id:mapKey(it), name:it.name, desc:it._desc||''}));
+      if(!candidates.length) throw new Error('مفيش مرشحين');
+      const candidateImages=[];
+      for(const it of (b.sugg||[]).slice(0,3)){
+        try{ const {base64,mime}=await fetchImageAsSmallB64(imgUrl(it)); candidateImages.push({id:mapKey(it), name:it.name, base64, mime}); }catch(e){}
+      }
+      const res=await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({item:b.name, section:b.section||'', description:b.desc||'', candidates, candidateImages})});
+      let data; try{ data=await res.json(); }catch(e){ throw new Error('رد n8n مش JSON صالح (HTTP '+res.status+')'); }
+      if(!res.ok || !data.ok) throw new Error(data.error||('HTTP '+res.status));
+      if(data.confidence==='high' && data.matchedId!=null){
+        const cand=(b.sugg||[]).find(it=>mapKey(it)===data.matchedId) || (b.sugg||[])[0];
+        acceptSuggestion(b.name, cand); ok++;
+        tr.innerHTML=`<td>${escapeHtml(b.name)}</td><td><span class="pill ok">✔ اتطابق (${data.tier}, ${data.confidence})</span></td><td>${escapeHtml(cand.name)}</td>`;
+      } else {
+        review++;
+        tr.innerHTML=`<td>${escapeHtml(b.name)}</td><td><span class="muted">— محتاج مراجعة يدوية (${escapeHtml(data.confidence||'?')})</span></td><td></td>`;
+      }
+    }catch(err){ fail++; tr.innerHTML=`<td>${escapeHtml(b.name)}</td><td><span class="pill no">✘ فشل</span></td><td class="muted">${escapeHtml(String(err.message||err).slice(0,140))}</td>`; }
+    tb.appendChild(tr);
+  }
+  $('claudeMatchProgress').innerHTML=`${state.cancel?'⏹️ اتوقف':'✅ خلص'}: <b>${ok}</b> اتطابقوا، <b>${review}</b> محتاجين مراجعة يدوية، <b>${fail}</b> فشلوا.`;
+  $('claudeMatchBtn').disabled=false; endOp();
 });
 
 // ----- import Gemini-downloaded images: resize ~220KB, rename to item, save to library + ZIP -----
@@ -2587,13 +2752,15 @@ async function embRerank(name, items, limit=4){
 async function geminiPick(batch){
   let prompt='You match restaurant menu item names to image file names. Context: Egyptian & Middle Eastern food delivery, Arabic+English mixed, transliteration, word-order and spelling variations common.\n'
     +'For EACH item pick the ONE candidate image that shows the SAME dish/product regardless of language or spelling differences.\n'
-    +'Use the section and description fields as extra context if provided. If truly no candidate matches, use -1.\n'
+    +'Use the section and description fields as extra context if provided. Candidates may have a parenthesized '
+    +'description after their file name (regional aliases, visible ingredients/toppings) — use it to catch matches '
+    +'that share no words with the file name. If truly no candidate matches, use -1.\n'
     +'Reply with ONLY a JSON array: [{"i":0,"c":2},{"i":1,"c":-1}]\n\n';
   batch.forEach((b,i)=>{
     let ctx='"'+b.name+'"';
     if(b.section) ctx+=' [section:'+b.section+']';
     if(b.desc)    ctx+=' [desc:'+b.desc.slice(0,120)+']';
-    prompt+=i+') '+ctx+' | candidates: '+b.cands.map((c,ci)=>'['+ci+'] "'+stripExt(c.name)+'"').join(' ')+'\n';
+    prompt+=i+') '+ctx+' | candidates: '+b.cands.map((c,ci)=>'['+ci+'] "'+stripExt(c.name)+'"'+(c._desc?' ('+c._desc.slice(0,100)+')':'')).join(' ')+'\n';
   });
   const body={contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}};
   let lastErr;
@@ -2877,27 +3044,79 @@ function renderSuggestions(){
   const pend=new Set(pendingMiss().map(r=>r.name));
   const dis=state.dismissed||(state.dismissed=new Set());
   const blocks=(state.suggestBlocks||[]).filter(b=>pend.has(b.name) && !dis.has(b.name));
-  let html='';
-  blocks.forEach((b)=>{
-    const bi=(state.suggestBlocks||[]).indexOf(b);
-    html+=`<div class="sugBlock" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
-        <div style="display:flex;flex-direction:column;gap:3px">
-          <b>${escapeHtml(b.name)}</b>
-          ${b.section?`<span style="font-size:11px;color:var(--muted)">${escapeHtml(b.section)}</span>`:''}
-        </div>
-        <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          ${b.section?`<button class="addSecSug" data-bi="${bi}" title="أعد البحث باسم الصنف + القسم" style="background:${b._withSection?'rgba(255,144,31,.25)':'var(--soft)'};border:1px solid ${b._withSection?'#ff901f':'var(--line)'};color:${b._withSection?'#ff901f':'var(--txt)'};border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer">🔍 ${b._withSection?'✓ ':''}<span style="opacity:.7;font-size:10px">+</span> ${escapeHtml(b.section)}</button>`:''}
-          <label class="ownImg" style="cursor:pointer;font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:5px 10px">📤 صورة من عندي<input type="file" accept="image/*" class="ownImgInp" data-name="${escapeAttr(b.name)}" style="display:none"></label>
-          <button class="dismissSug" data-name="${escapeAttr(b.name)}" title="إخفاء الاقتراح" style="background:var(--soft);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:5px 10px;font-size:13px">✕</button>
-        </span>
-      </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">`;
-    b.sugg.forEach((it,si)=>{ if(!it) return; const {fxb,olb,aib}=_sugBadges(it); html+=`<div class="sugSlot" style="text-align:center"><div style="position:relative;display:inline-block"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}" onerror="_handleSugImgError(this,${bi},${si})"><button class="dismissOneSug" data-b="${bi}" data-s="${si}" title="استبدل بصورة تانية" style="position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:20px;padding:0;display:flex;align-items:center;justify-content:center">↻</button></div><br><span class="muted sugCap" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
-    html+=`</div></div>`;
+
+  if(!blocks.length) { box.innerHTML=''; return; }
+
+  // Group blocks by section
+  const bySection = {};
+  blocks.forEach((b,idx)=>{
+    const sec = b.section || '(بدون قسم)';
+    if(!bySection[sec]) bySection[sec] = [];
+    bySection[sec].push({block:b, blockIdx:(state.suggestBlocks||[]).indexOf(b)});
   });
+
+  const sections = Object.keys(bySection);
+  const firstSec = sections[0];
+
+  // Build tabs header
+  let html = `<div class="sugTabsContainer" style="margin-bottom:12px">
+    <div class="sugTabs" style="display:flex;gap:6px;border-bottom:2px solid var(--line);overflow-x:auto;padding-bottom:0">`;
+
+  sections.forEach(sec => {
+    const count = bySection[sec].length;
+    const isActive = sec === firstSec ? 'active' : '';
+    html += `<button class="sugTab ${isActive}" data-section="${escapeAttr(sec)}"
+      style="padding:8px 14px;font-size:13px;font-weight:600;border:0;background:transparent;color:${sec === firstSec ? 'var(--accent)' : 'var(--muted)'};border-bottom:${sec === firstSec ? '2px solid var(--accent)' : 'none'};cursor:pointer;transition:.15s;white-space:nowrap"
+      onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='${sec === firstSec ? 'var(--accent)' : 'var(--muted)'}'" >
+      ${escapeHtml(sec)} <span style="font-size:11px;opacity:.6">(${count})</span>
+    </button>`;
+  });
+
+  html += `</div></div>`;
+
+  // Build tab contents
+  html += `<div class="sugTabContents">`;
+  sections.forEach(sec => {
+    const isActive = sec === firstSec ? 'active' : '';
+    html += `<div class="sugTabContent ${isActive}" data-section="${escapeAttr(sec)}" style="display:${sec === firstSec ? 'block' : 'none'}">`;
+
+    bySection[sec].forEach(({block:b, blockIdx:bi}) => {
+      html+=`<div class="sugBlock" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <b>${escapeHtml(b.name)}</b>
+          </div>
+          <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+            ${b.section?`<button class="addSecSug" data-bi="${bi}" title="أعد البحث باسم الصنف + القسم" style="background:${b._withSection?'rgba(255,144,31,.25)':'var(--soft)'};border:1px solid ${b._withSection?'#ff901f':'var(--line)'};color:${b._withSection?'#ff901f':'var(--txt)'};border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer">🔍 ${b._withSection?'✓ ':''}<span style="opacity:.7;font-size:10px">+</span></button>`:''}
+            <label class="ownImg" style="cursor:pointer;font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:5px 10px">📤<input type="file" accept="image/*" class="ownImgInp" data-name="${escapeAttr(b.name)}" style="display:none"></label>
+            <button class="dismissSug" data-name="${escapeAttr(b.name)}" title="إخفاء الاقتراح" style="background:var(--soft);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:5px 10px;font-size:13px">✕</button>
+          </span>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">`;
+      b.sugg.forEach((it,si)=>{ if(!it) return; const {fxb,olb,aib}=_sugBadges(it); html+=`<div class="sugSlot" style="text-align:center"><div style="position:relative;display:inline-block"><img class="thumb clk2" style="width:84px;height:84px" src="${imgUrl(it)}" onerror="_handleSugImgError(this,${bi},${si})"><button class="dismissOneSug" data-b="${bi}" data-s="${si}" title="استبدل بصورة تانية" style="position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:20px;padding:0;display:flex;align-items:center;justify-content:center">↻</button></div><br><span class="muted sugCap" style="font-size:11px">${escapeHtml(it.name)}${aib}${fxb}${olb}</span><br><button class="acceptSug" data-b="${bi}" data-s="${si}" style="margin-top:4px;font-size:12px;padding:5px 12px">أضيفها</button></div>`; });
+      html+=`</div></div>`;
+    });
+
+    html += `</div>`;
+  });
+  html += `</div>`;
+
   box.innerHTML=html;
   applyLang(LANG);
+
+  // Tab switching
+  document.querySelectorAll('.sugTab').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const sec = e.target.closest('.sugTab').dataset.section;
+      document.querySelectorAll('.sugTab').forEach(b => {
+        b.style.color = b.dataset.section === sec ? 'var(--accent)' : 'var(--muted)';
+        b.style.borderBottom = b.dataset.section === sec ? '2px solid var(--accent)' : 'none';
+      });
+      document.querySelectorAll('.sugTabContent').forEach(c => {
+        c.style.display = c.dataset.section === sec ? 'block' : 'none';
+      });
+    });
+  });
 }
 $('suggestList').addEventListener('click', e=>{
   const img=e.target.closest('.clk2'); if(img){ $('previewImg').src=img.src; $('previewCap').textContent='معاينة'; $('preview').style.display='flex'; return; }

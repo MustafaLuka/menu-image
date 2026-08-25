@@ -8,6 +8,8 @@ _*
 *.extracted
 .claude/
 *.log
+incoming_done_*/
+coc_temp.xlsx
 
 # OS junk
 Thumbs.db

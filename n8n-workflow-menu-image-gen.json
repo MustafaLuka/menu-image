@@ -1,0 +1,321 @@
+{
+  "name": "Menu Matcher - Generate Product Image",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Setup checklist after import\n1. Create (or reuse) an **OpenAi account** credential (type `openAiApi`) pointed at your internal AI gateway. Set its **Base URL** field to the gateway's base URL (e.g. `https://your-gateway.internal/v1`).\n2. Attach that credential to BOTH \"Generate Image (Gateway)\" and \"Start Sora Video Job (Stub)\" HTTP Request nodes.\n3. This workflow references the credential's base URL dynamically via `{{$credentials.url}}`. **Verify the field is actually named `url`** on the OpenAi credential in your n8n version — if not, edit the two HTTP Request node URLs to match (or just hardcode your gateway's base URL).\n4. Activate the workflow (top-right toggle), then copy the **Production** webhook URL from the Webhook node (Test URL only works while listening for a test event in the editor).\n5. Point the Menu Matcher browser app's fetch() call at that production URL.",
+        "height": 320,
+        "width": 420,
+        "color": 6
+      },
+      "id": "c9d0e1f2-a3b4-4567-c8d9-e0f1a2b3c4d5",
+      "name": "Sticky Note - Setup Checklist",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 40]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "menu-matcher-gen-image",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "8f1b2a4e-6c3d-4a1f-9b2e-1a2b3c4d5e6f",
+      "name": "Webhook - Generate Menu Image",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 420],
+      "webhookId": "d0e1f2a3-b4c5-4678-d9e0-f1a2b3c4d5e6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3a1b5c7d-9e2f-4a1b-8c3d-5e6f7a8b9c0d",
+              "leftValue": "={{ $json.body.model }}",
+              "rightValue": "sora-2",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3c9d8b7a-5e2f-4c1a-8d3b-2f4e6a8c9d0e",
+      "name": "Is Sora Model?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [540, 420]
+    },
+    {
+      "parameters": {
+        "content": "### Why an HTTP Request node instead of the native OpenAI node\nThe native OpenAI node's **Image → Generate** operation exposes `Model` as a fixed-list/options parameter (dynamically populated from `/v1/models`). Whether that field currently accepts an arbitrary expression string (e.g. `gemini-3.1-flash-image-preview`, a value n8n's own dropdown has never heard of) is not guaranteed across n8n versions.\n\nTo be safe, this workflow uses a plain **HTTP Request** node with **Authentication = Predefined Credential Type → OpenAi Api**, so it reuses the exact same `openAiApi` credential (and its Base URL) the native node would use, while sending `model` as a fully dynamic expression (`={{ $json.body.model }}`) in the JSON body — guaranteed to pass through untouched.\n\n**VERIFY:** if your n8n version's native OpenAI node lets you switch the Model field to expression mode and type any string, you can swap this node for the native one 1:1.",
+        "height": 300,
+        "width": 420,
+        "color": 5
+      },
+      "id": "a7b8c9d0-e1f2-4345-a6b7-c8d9e0f1a2b3",
+      "name": "Sticky Note - HTTP Request Rationale",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [820, 20]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $credentials.url }}/images/generations",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": $json.body.model, \"prompt\": $json.body.prompt, \"n\": 1, \"size\": \"1024x1024\" } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7",
+      "name": "Generate Image (Gateway)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 260],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $credentials.url }}/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"sora-2\", \"prompt\": $json.body.prompt } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "b2c3d4e5-f6a7-4890-b1c2-d3e4f5a6b7c8",
+      "name": "Start Sora Video Job (Stub)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 660],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### sora-2 is intentionally a stub\n`sora-2` is a **video** model using OpenAI's async Videos API (`POST /v1/videos` → poll status → fetch content separately). That job/poll/fetch shape does not fit this synchronous \"one image back in the HTTP response\" contract.\n\nThis branch only **kicks off** the video job and immediately responds with:\n`{ ok: false, error: \"sora-2 video generation is async and not yet wired into the auto-import flow; job id: <id>\" }`\n\nNo polling or content-fetch is implemented here — that's future work for a separate async-capable flow (e.g. webhook callback or a second poller workflow).",
+        "height": 260,
+        "width": 420,
+        "color": 3
+      },
+      "id": "b8c9d0e1-f2a3-4456-b7c8-d9e0f1a2b3c4",
+      "name": "Sticky Note - Sora Stub Explanation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [820, 800]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Normalizes BOTH the success output and the HTTP node's own error output\n// (onError: continueErrorOutput) into the single { ok, imageBase64, mime } / { ok:false, error } contract.\nconst data = $json;\n\n// Case 1: this item came from the HTTP Request node's ERROR output.\nif (data && data.error) {\n  const err = data.error;\n  const message = typeof err === 'string'\n    ? err\n    : (err.message || err.description || JSON.stringify(err));\n  return { json: { ok: false, error: String(message) } };\n}\n\n// Case 2: successful gateway response - extract the base64 image.\n// Typical OpenAI-compatible shape: { data: [ { b64_json: \"...\" } ], ... }\ntry {\n  const b64 = data && data.data && data.data[0] && data.data[0].b64_json;\n  if (!b64) {\n    return {\n      json: {\n        ok: false,\n        error: 'The image model did not return base64 image data. Raw response: ' + JSON.stringify(data).slice(0, 500)\n      }\n    };\n  }\n  return { json: { ok: true, imageBase64: b64, mime: 'image/png' } };\n} catch (err) {\n  return { json: { ok: false, error: 'Failed to parse image response: ' + err.message } };\n}\n"
+      },
+      "id": "c3d4e5f6-a7b8-4901-c2d3-e4f5a6b7c8d9",
+      "name": "Format Image Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 260]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Normalizes BOTH the success output and the HTTP node's own error output\n// (onError: continueErrorOutput) into the { ok:false, error } contract.\n// sora-2 is always a stub response (never ok:true) - see Sticky Note.\nconst data = $json;\n\nif (data && data.error) {\n  const err = data.error;\n  const message = typeof err === 'string'\n    ? err\n    : (err.message || err.description || JSON.stringify(err));\n  return { json: { ok: false, error: 'Failed to start sora-2 video job: ' + String(message) } };\n}\n\nconst jobId = (data && (data.id || (data.data && data.data.id))) || 'unknown';\nreturn {\n  json: {\n    ok: false,\n    error: 'sora-2 video generation is async and not yet wired into the auto-import flow; job id: ' + jobId\n  }\n};\n"
+      },
+      "id": "d4e5f6a7-b8c9-4012-d3e4-f5a6b7c8d9e0",
+      "name": "Format Sora Stub Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 660]
+    },
+    {
+      "parameters": {
+        "content": "### CORS notes (verified against n8n source)\nThe **Respond to Webhook** node below explicitly sets `Access-Control-Allow-Origin: *` plus `Access-Control-Allow-Methods` / `Access-Control-Allow-Headers` response headers on the real POST response, so the browser's cross-origin `fetch()` (e.g. from `https://menu-matcher.lths.ai` or `http://localhost:8791`) is not blocked.\n\nSeparately, n8n's own webhook request handler (`packages/cli/src/webhooks/webhook-request-handler.ts`) handles the `OPTIONS` preflight automatically for every webhook, BEFORE any workflow logic runs: if no `allowedOrigins` is set, or it's `*`, or it matches the caller, n8n reflects the request's `Origin` header back as `Access-Control-Allow-Origin`, and always sets `Access-Control-Allow-Methods` (and, on the OPTIONS request itself, `Access-Control-Allow-Headers`/`Access-Control-Max-Age`). This is core, instance-level behavior — it is NOT something JSON import can fail to configure.\n\nThe Webhook node's `options.allowedOrigins: \"*\"` field in this JSON is honored by that same backend code path. Note: in current n8n releases this field may or may not still show up as an editable \"Allowed Origins (CORS)\" control in the node's Options panel in the editor UI (this has been in flux) — if you don't see it, that's fine, the value from this JSON is still read by the backend and produces the origin-reflection behavior described above either way.\n\nNo other n8n Cloud instance-level CORS toggle is needed.",
+        "height": 340,
+        "width": 440,
+        "color": 6
+      },
+      "id": "f6a7b8c9-d0e1-4234-f5a6-b7c8d9e0f1a2",
+      "name": "Sticky Note - CORS Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1500, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "id": "e5f6a7b8-c9d0-4123-e4f5-a6b7c8d9e0f1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1460, 460]
+    }
+  ],
+  "connections": {
+    "Webhook - Generate Menu Image": {
+      "main": [
+        [
+          {
+            "node": "Is Sora Model?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Sora Model?": {
+      "main": [
+        [
+          {
+            "node": "Start Sora Video Job (Stub)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Image (Gateway)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image (Gateway)": {
+      "main": [
+        [
+          {
+            "node": "Format Image Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Image Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Sora Video Job (Stub)": {
+      "main": [
+        [
+          {
+            "node": "Format Sora Stub Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Sora Stub Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Image Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Sora Stub Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
