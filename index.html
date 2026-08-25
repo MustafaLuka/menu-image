@@ -89,6 +89,11 @@
   .thumb{width:46px;height:46px;object-fit:cover;border-radius:6px;background:var(--soft);border:1px solid var(--line)}
   .thumb.clk{cursor:zoom-in}
   #impList .thumb{cursor:default}
+  .thumb-drop{position:relative;border-radius:8px;transition:outline .1s ease}
+  .thumb-drop.drag-over{outline:2px dashed var(--accent);outline-offset:2px}
+  .thumb-drop .row-img-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:11px;background:transparent;border:0;color:transparent;cursor:pointer;padding:0}
+  .thumb-drop:hover .row-img-btn{background:rgba(0,0,0,.45);color:#fff}
   input.rename{width:170px;padding:6px 8px;font-size:13px}
   button.swap{background:var(--soft);border:1px solid var(--line);color:var(--txt);padding:6px 10px;font-size:12.5px;font-weight:600}
   #preview{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50}
@@ -849,6 +854,13 @@ function switchPanel(name){
 // Source-keyed: keys are the exact trimmed Arabic text as it appears in the markup.
 // Anything not in the map stays Arabic (graceful). Dynamic/data areas are left as-is.
 const I18N = {
+  // inline drag-and-drop row image override
+  'اتحطت صورة لـ: ':'Image set for: ',
+  'فشل رفع الصورة: ':'Failed to upload image: ',
+  'بجهّز الصور اللي سحبتها...':'Preparing the images you dropped...',
+  'اترفع ':'Uploaded ',
+  ' صورة (منهم ':' images (',
+  ' اتسمّوا تلقائيًا). دوس «نزّل الكل» في صفحة التصدير أو استوردهم من أدوات الذكاء الاصطناعي.':' auto-named by matching). Use "Download all" on the Export step, or import them from AI assistance tools.',
   // wizard restructure (Upload / Match & Generate / Export)
   'رفع المنيو':'Upload Menu',
   'مطابقة وتوليد':'Match & Generate',
@@ -2151,13 +2163,18 @@ function renderResults(){
         : `<span class="muted" style="font-size:12px">الصورة الوحيدة</span>`;
       const removeBtn=`<button class="rmatch" data-i="${i}" title="احذف المطابقة — يرجع الصنف لـ ناقصة" style="background:transparent;border:1px solid rgba(236,67,64,.4);color:#ec4340;padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;margin-inline-start:4px">✕</button>`;
       tr.innerHTML=`
-        <td><img class="thumb clk" data-i="${i}" src="${imgUrl(cand)}" title="اضغط للتكبير" onerror="_handleResultImgError(this,${i})"></td>
+        <td class="thumb-drop" data-i="${i}"><img class="thumb clk" data-i="${i}" src="${imgUrl(cand)}" title="اضغط للتكبير" onerror="_handleResultImgError(this,${i})">
+          <button class="row-img-btn" data-i="${i}" title="اسحب صورة هنا أو دوس لتغييرها">📤</button>
+          <input type="file" accept="image/*" class="rowImgInp" data-i="${i}" style="display:none"></td>
         <td>${escapeHtml(row.name)}</td>
         <td>${badge}</td>
         <td><input class="rename" data-i="${i}" value="${escapeAttr(row.outBase)}"><span class="muted extlbl" style="font-size:12px"> ${escapeHtml(ext)}</span></td>
         <td>${swap}${removeBtn}</td>`;
     } else {
-      tr.innerHTML=`<td><span class="muted">—</span></td><td>${escapeHtml(row.name)}</td>
+      tr.innerHTML=`<td class="thumb-drop" data-i="${i}"><span class="muted">—</span>
+          <button class="row-img-btn" data-i="${i}" title="اسحب صورة هنا أو دوس لإضافتها">📤</button>
+          <input type="file" accept="image/*" class="rowImgInp" data-i="${i}" style="display:none"></td>
+        <td>${escapeHtml(row.name)}</td>
         <td><span class="pill no">✘ غير موجودة</span></td><td class="muted">—</td><td></td>`;
     }
     tb.appendChild(tr);
@@ -2225,6 +2242,64 @@ $('resTbl').addEventListener('click', e=>{
 });
 $('resTbl').addEventListener('input', e=>{
   const rn=e.target.closest('.rename'); if(rn){ state.results[+rn.dataset.i].outBase = rn.value; }
+});
+
+// ===================== inline drag-and-drop / click-to-browse image override per row =====================
+// One row, one file: miss -> found reuses the exact useOwnImage() chain; found -> found overrides
+// the candidate list in place (flagged .overridden so it's visually distinct from an auto-match).
+async function applyRowImage(i, file){
+  const row=state.results[i]; if(!row || !file) return;
+  const td=$('resTbl').querySelectorAll('.thumb-drop')[i] || $('resTbl').querySelector(`.thumb-drop[data-i="${i}"]`);
+  try{
+    if(row.type==='miss'){
+      await useOwnImage(row.name, file);   // promotes miss -> found, persists to library (local) / session (cloud)
+    } else {
+      await importOne(row.name, file);
+      const blob=state.imported[row.name].blob;
+      row.candidates=[{url:URL.createObjectURL(blob), name:row.name}];
+      row.chosenIdx=0; row.overridden=true;
+      renderResults();
+    }
+    log(tr('اتحطت صورة لـ: ')+row.name);
+  }catch(err){ log(tr('فشل رفع الصورة: ')+err.message); }
+  finally{ if(td) td.classList.remove('drag-over'); }
+}
+$('resTbl').addEventListener('click', e=>{
+  const btn=e.target.closest('.row-img-btn'); if(!btn) return;
+  const inp=btn.parentElement.querySelector('.rowImgInp'); if(inp) inp.click();
+});
+$('resTbl').addEventListener('change', e=>{
+  const inp=e.target.closest('.rowImgInp'); if(!inp || !inp.files[0]) return;
+  applyRowImage(+inp.dataset.i, inp.files[0]);
+});
+$('resTbl').addEventListener('dragover', e=>{
+  const td=e.target.closest('.thumb-drop'); if(!td) return;
+  e.preventDefault(); td.classList.add('drag-over');
+});
+$('resTbl').addEventListener('dragleave', e=>{
+  const td=e.target.closest('.thumb-drop'); if(td) td.classList.remove('drag-over');
+});
+$('resTbl').addEventListener('drop', async e=>{
+  const files=[...(e.dataTransfer?.files||[])]; if(!files.length) return;
+  e.preventDefault();
+  const td=e.target.closest('.thumb-drop');
+  if(td && files.length===1){ applyRowImage(+td.dataset.i, files[0]); return; }
+  // multiple files (or dropped between rows, not on a specific thumbnail) -> bulk auto-match by filename,
+  // same logic as the #bulkFiles import handler: stage into state.imported, matched-by-name when possible.
+  document.querySelectorAll('#resTbl .thumb-drop').forEach(t=>t.classList.remove('drag-over'));
+  const target=parseInt($('targetKB').value)||300;
+  log(tr('بجهّز الصور اللي سحبتها...'));
+  let mapped=0;
+  for(const f of files){
+    if(!/^image\//.test(f.type) && !/\.(jpe?g|png|webp)$/i.test(f.name)) continue;
+    try{
+      const base=stripExt(f.name); const matched=matchToMissing(base);
+      const itemName=matched||base; if(matched) mapped++;
+      await importOne(itemName, f);
+    }catch(err){ /* skip a bad image */ }
+  }
+  refreshMissingUI();
+  log(tr('اترفع ')+Object.keys(state.imported).length+tr(' صورة (منهم ')+mapped+tr(' اتسمّوا تلقائيًا). دوس «نزّل الكل» في صفحة التصدير أو استوردهم من أدوات الذكاء الاصطناعي.'));
 });
 function showPreview(i){
   const row=state.results[i]; if(!row||row.type!=='found') return;
