@@ -455,6 +455,10 @@
             <button id="emailBtn">✉️ <span data-i18n="فتح البريد">فتح البريد</span></button>
           </div>
           <div id="emailHint" class="hint" style="margin-top:8px"></div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
+            <button id="autoEmailBtn" class="ghost">🤖 <span data-i18n="إرسال أوتوماتيكي (n8n)">إرسال أوتوماتيكي (n8n)</span></button>
+            <div id="autoEmailProgress" class="hint" style="margin-top:8px"></div>
+          </div>
         </div>
 
         <div class="card">
@@ -668,6 +672,14 @@
           <div id="librarySyncProgress" class="hint" style="margin-top:8px"></div>
         </div>
 
+        <!-- Email delivery (n8n) — admin only -->
+        <div class="card">
+          <h2>✉️ <span data-i18n="إرسال أوتوماتيكي بالبريد (n8n)">إرسال أوتوماتيكي بالبريد (n8n)</span></h2>
+          <div class="hint" style="margin-bottom:10px" data-i18n="زرار «إرسال أوتوماتيكي» في خطوة التصدير بيبعت ملف الصور المجمّع لـ n8n workflow، وهو يبعته بالبريد.">زرار «إرسال أوتوماتيكي» في خطوة التصدير بيبعت ملف الصور المجمّع لـ n8n workflow، وهو يبعته بالبريد.</div>
+          <label>🔗 n8n Webhook URL (Production)</label>
+          <input type="text" id="emailWebhookUrl" placeholder="https://your-instance.app.n8n.cloud/webhook/menu-matcher-email-deliver">
+        </div>
+
         <!-- Cloud image upload — admin only -->
         <div class="card" id="cloudAddBox">
           <h2>☁️ <span data-i18n="ضيف صور للمكتبة السحابية (للكل)">ضيف صور للمكتبة السحابية (للكل)</span></h2>
@@ -865,6 +877,16 @@ function switchPanel(name){
 // Source-keyed: keys are the exact trimmed Arabic text as it appears in the markup.
 // Anything not in the map stays Arabic (graceful). Dynamic/data areas are left as-is.
 const I18N = {
+  // email delivery automation (Phase 8)
+  'إرسال أوتوماتيكي بالبريد (n8n)':'Automatic email delivery (n8n)',
+  'زرار «إرسال أوتوماتيكي» في خطوة التصدير بيبعت ملف الصور المجمّع لـ n8n workflow، وهو يبعته بالبريد.':'The "Send automatically" button on the Export step sends the combined image ZIP to an n8n workflow, which emails it.',
+  'إرسال أوتوماتيكي (n8n)':'Send automatically (n8n)',
+  'خدمة الإرسال الأوتوماتيكي لسه مش مفعّلة. كلّم الأدمن.':'Automatic sending isn\'t enabled yet. Ask the admin.',
+  'بجهّز ملف الصور...':'Preparing the image file...',
+  'مفيش صور جاهزة للإرسال — طابِق الأول.':'No images ready to send yet — run a match first.',
+  'بيبعت...':'Sending...',
+  'اتبعت بنجاح.':'Sent successfully.',
+  'فشل الإرسال: ':'Send failed: ',
   // library sync flagging (Phase 5)
   'يحتاج مزامنة':'needs sync',
   'تحتاج مزامنة مع المكتبة':'Needs library sync',
@@ -2635,6 +2657,37 @@ $('librarySyncBtn').addEventListener('click', async ()=>{
   $('librarySyncBtn').disabled=false;
 });
 
+// ----- email delivery (n8n): package the combined ZIP and hand it to a workflow that emails it -----
+$('emailWebhookUrl').value = localStorage.getItem('emailWebhookUrl') || '';
+$('emailWebhookUrl').addEventListener('input', ()=>localStorage.setItem('emailWebhookUrl', $('emailWebhookUrl').value));
+$('autoEmailBtn').addEventListener('click', async ()=>{
+  const url=(localStorage.getItem('emailWebhookUrl')||'').trim();
+  const prog=$('autoEmailProgress');
+  if(!url){ prog.innerHTML=tr('خدمة الإرسال الأوتوماتيكي لسه مش مفعّلة. كلّم الأدمن.'); return; }
+  $('autoEmailBtn').disabled=true; startOp();
+  prog.textContent=tr('بجهّز ملف الصور...');
+  try{
+    const zipResult=await buildCombinedZipBlob((k,total)=>{ prog.textContent=tr('بجهّز ملف الصور...')+` ${k}/${total}`; });
+    if(!zipResult) throw new Error(tr('مفيش صور جاهزة للإرسال — طابِق الأول.'));
+    prog.textContent=tr('بيبعت...');
+    const found=(state.results||[]).filter(r=>r.type==='found').length;
+    const miss=(state.results||[]).filter(r=>r.type==='miss').length;
+    const fd=new FormData();
+    fd.append('zipFile', zipResult.blob, (state.fileName||'menu').replace(/\.(xlsx|xlsm)$/i,'')+'_all_images.zip');
+    fd.append('restaurantName', $('emailTo').value.trim());
+    fd.append('menuFileName', state.fileName||'');
+    fd.append('matchedCount', String(found));
+    fd.append('missingCount', String(miss));
+    fd.append('senderEmail', $('emailFrom').value.trim());
+    fd.append('notes', $('emailBody').value.trim());
+    const res=await fetch(url, {method:'POST', body:fd});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok || data.ok===false) throw new Error(data.error||('HTTP '+res.status));
+    prog.innerHTML='✅ '+tr('اتبعت بنجاح.');
+  }catch(err){ prog.innerHTML='⚠️ '+tr('فشل الإرسال: ')+err.message; }
+  $('autoEmailBtn').disabled=false; endOp();
+});
+
 // ----- smart matching via Claude (n8n): text-tier pick from candidate names, escalate to vision when unsure -----
 $('claudeWebhookUrl').value = localStorage.getItem('claudeWebhookUrl') || '';
 $('claudeWebhookUrl').addEventListener('input', ()=>localStorage.setItem('claudeWebhookUrl', $('claudeWebhookUrl').value));
@@ -2856,15 +2909,17 @@ $('bulkFiles').addEventListener('change', async e=>{
   loadLibrary();
 });
 // combined ZIP: found library images (renamed) + imported images (renamed) in one file (no duplicates)
-$('combineZip').addEventListener('click', async ()=>{
+// shared by the "download all" button and the Export step's "email via automation" trigger —
+// builds one ZIP of every found item's image (library or imported) + any extra imported images
+// not yet matched to a found row. No duplicated zip-building logic between the two call sites.
+async function buildCombinedZipBlob(onProgress){
   const found=(state.results||[]).filter(r=>r.type==='found');
   const foundNames=new Set(found.map(r=>r.name));
   const extraImp=Object.keys(state.imported).filter(n=>!foundNames.has(n)); // imported but not yet in found
-  if(!found.length && !extraImp.length) return;
-  $('combineZip').disabled=true; startOp();
+  if(!found.length && !extraImp.length) return null;
   const zip=new JSZip(); const used=new Set(); let k=0;
   const total=found.length+extraImp.length;
-  const prog=()=>{ $('impProgress').textContent=tr('بجمّع الكل...')+` ${++k}/${total}`; };
+  const prog=()=>{ k++; if(onProgress) onProgress(k, total); };
   // Fetch found images in parallel batches (use imported blob when available — faster, no duplicate)
   const CONCUR=6;
   const toFetch=found.filter(r=>!state.imported[r.name]);
@@ -2877,8 +2932,17 @@ $('combineZip').addEventListener('click', async ()=>{
     const {blob,ext}=imp?{blob:imp.blob,ext:imp.ext}:(blobs.get(row.name)||{blob:new Blob(),ext:'.jpg'});
     let n=sanitizeFile(row.outBase)+ext; if(used.has(n))n=uniqueName(used,n); used.add(n); zip.file(n,blob); }
   for(const it of extraImp){ if(state.cancel) break; prog(); const e=state.imported[it]; let n=sanitizeFile(it)+e.ext; if(used.has(n))n=uniqueName(used,n); used.add(n); zip.file(n,e.blob); }
-  download(await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}}), state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_all_images.zip');
-  $('impProgress').innerHTML=`${state.cancel?'⏹️ '+tr('اتوقف'):'✅'} ${tr('نزّل ملف فيه')} <b>${k}</b> ${tr('صورة (الموجودة + المستوردة)')}.`; $('combineZip').disabled=false; endOp();
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}});
+  return {blob, count:k};
+}
+$('combineZip').addEventListener('click', async ()=>{
+  $('combineZip').disabled=true; startOp();
+  const result=await buildCombinedZipBlob((k,total)=>{ $('impProgress').textContent=tr('بجمّع الكل...')+` ${k}/${total}`; });
+  if(result){
+    download(result.blob, state.fileName.replace(/\.(xlsx|xlsm)$/i,'')+'_all_images.zip');
+    $('impProgress').innerHTML=`${state.cancel?'⏹️ '+tr('اتوقف'):'✅'} ${tr('نزّل ملف فيه')} <b>${result.count}</b> ${tr('صورة (الموجودة + المستوردة)')}.`;
+  }
+  $('combineZip').disabled=false; endOp();
 });
 
 // ----- smart suggestions: near-matches from the library for missing items (added only on confirm) -----

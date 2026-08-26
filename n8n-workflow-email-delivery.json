@@ -1,0 +1,174 @@
+{
+  "name": "Menu Matcher - Email Delivery",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Setup checklist after import\n1. Create a **Header Auth** credential (type `httpHeaderAuth`), header `Authorization`, value `Bearer <SYNC_SERVICE_TOKEN>` — same secret as the Worker's `SYNC_SERVICE_TOKEN` (see `worker/README.md` step 7). This endpoint sends real email, so it must not be publicly callable.\n2. Create an **SMTP** credential (Credentials -> New -> Send Email / SMTP): host, port, user, password for whatever mailbox you want the automated emails to come FROM (Gmail SMTP with an app password, Outlook/Exchange, SendGrid SMTP relay, or an internal Talabat relay all work — this node just needs standard SMTP).\n3. Attach the Header Auth credential to the **Webhook - Email Delivery** node, and the SMTP credential to the **Send Email** node.\n4. Activate the workflow, copy the **Production** webhook URL, and paste it into the Menu Matcher app's Admin tab as `emailWebhookUrl`.\n5. The recipient (`mostafa.ali.2@talabat.com`) is hardcoded in the **Send Email** node per the original request — change it there if that ever needs to move.\n6. The client sends the ZIP it already builds in-browser (via JSZip) as `multipart/form-data` — this workflow never builds or re-compresses a ZIP itself; n8n's webhook node parses the multipart body into a binary property automatically.",
+        "height": 420,
+        "width": 460,
+        "color": 6
+      },
+      "id": "e1111111-1111-4111-8111-111111111201",
+      "name": "Sticky Note - Setup Checklist",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 40]
+    },
+    {
+      "parameters": {
+        "content": "### Payload contract (sent by index.html's Export step)\n`multipart/form-data` POST:\n- `zipFile` (binary) — the exact Blob already produced by combineZip()/dlZip()\n- `restaurantName`, `menuFileName` (text)\n- `matchedCount`, `missingCount` (text)\n- `senderEmail` (text, optional)\n- `notes` (text, optional — from the editable email body textarea)\n\nResponse: `{ ok: true }` / `{ ok: false, error }` — same convention the app's other n8n webhooks already expect.",
+        "height": 260,
+        "width": 420,
+        "color": 5
+      },
+      "id": "e1111111-1111-4111-8111-111111111202",
+      "name": "Sticky Note - Payload Contract",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [720, 40]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "menu-matcher-email-deliver",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "e1111111-1111-4111-8111-111111111203",
+      "name": "Webhook - Email Delivery",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 420],
+      "webhookId": "f2222222-2222-4222-8222-222222222202",
+      "credentials": {
+        "httpHeaderAuth": { "id": "1", "name": "Menu Matcher Sync Token" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "f1111111-1111-4111-8111-111111111204",
+              "leftValue": "={{ $binary.zipFile ? $binary.zipFile.fileSize : 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            },
+            {
+              "id": "f1111111-1111-4111-8111-111111111205",
+              "leftValue": "={{ $binary.zipFile ? $binary.zipFile.fileSize : 0 }}",
+              "rightValue": 25000000,
+              "operator": { "type": "number", "operation": "lte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1111111-1111-4111-8111-111111111206",
+      "name": "Zip Attached & Under 25MB?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [520, 420]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const b = $input.first().json.body || {};\nconst subject = (b.menuFileName ? b.menuFileName + ' - ' : '') + 'Menu Images';\nconst matched = b.matchedCount ?? '?';\nconst missing = b.missingCount ?? '?';\nconst restaurant = b.restaurantName || 'the restaurant';\nconst text = `Menu images for ${restaurant}.\\n\\nMatched: ${matched}\\nStill missing: ${missing}\\n\\n${b.notes || ''}`.trim();\nreturn [{ json: { subject, text, senderEmail: b.senderEmail || '' } }];\n"
+      },
+      "id": "e1111111-1111-4111-8111-111111111207",
+      "name": "Build Email Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 340]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.senderEmail || undefined }}",
+        "toEmail": "mostafa.ali.2@talabat.com",
+        "subject": "={{ $json.subject }}",
+        "text": "={{ $json.text }}",
+        "attachments": "zipFile",
+        "options": {}
+      },
+      "id": "e1111111-1111-4111-8111-111111111208",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1080, 340],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "smtp": { "id": "2", "name": "Menu Matcher SMTP" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const d = $input.first().json;\nif (d && d.error) {\n  const msg = typeof d.error === 'string' ? d.error : (d.error.message || JSON.stringify(d.error));\n  return [{ json: { ok: false, error: String(msg) } }];\n}\nreturn [{ json: { ok: true } }];\n"
+      },
+      "id": "e1111111-1111-4111-8111-111111111209",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 340]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { ok: false, error: 'zipFile attachment missing or over 25MB' } }];\n"
+      },
+      "id": "e1111111-1111-4111-8111-111111111210",
+      "name": "Format Rejection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 560]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "e1111111-1111-4111-8111-111111111211",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1640, 420]
+    }
+  ],
+  "connections": {
+    "Webhook - Email Delivery": { "main": [[{ "node": "Zip Attached & Under 25MB?", "type": "main", "index": 0 }]] },
+    "Zip Attached & Under 25MB?": {
+      "main": [
+        [{ "node": "Build Email Fields", "type": "main", "index": 0 }],
+        [{ "node": "Format Rejection", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Email Fields": { "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]] },
+    "Send Email": {
+      "main": [
+        [{ "node": "Format Response", "type": "main", "index": 0 }],
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Response": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] },
+    "Format Rejection": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
