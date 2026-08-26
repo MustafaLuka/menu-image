@@ -52,6 +52,22 @@ below is done through the Cloudflare dashboard.
 In `index.html`, set `WORKER_BASE` (near `R2_BASE`) to the URL from step 1,
 then deploy `index.html` as usual (push to GitHub Pages / vibehost).
 
+## 7. Service token secret (for the n8n Library Sync / Email Delivery workflows)
+
+The two n8n workflows (`n8n-workflow-library-sync.json`, `n8n-workflow-email-delivery.json`)
+call back into this Worker's `/api/cloud-add`, `/api/cloud-rename`, `/api/match-feedback`, and
+`/api/hash-index` endpoints unattended — they can't depend on a human's 24h `/api/login` session.
+
+1. Generate a long random secret yourself, e.g. `openssl rand -hex 32` (or any password
+   generator — it just needs to be long and unguessable).
+2. Worker → **Settings** → **Variables** → **Add variable** → name `SYNC_SERVICE_TOKEN` →
+   paste the secret → toggle **Encrypt** → **Save and deploy**.
+3. Paste the **same** value into both n8n workflows' Header Auth credential (see the sticky
+   note in each workflow JSON after importing it into n8n).
+4. Rotate any time by changing it in both places together — there's no grace period, so expect
+   a brief window where in-flight sync/email calls from the old secret will 401 until you update
+   the n8n credential too.
+
 ## Updating the Worker later
 
 Any time `worker/index.js` changes: Worker → **Edit code** → paste the new

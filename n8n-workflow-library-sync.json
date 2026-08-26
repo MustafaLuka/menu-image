@@ -1,0 +1,389 @@
+{
+  "name": "Menu Matcher - Library Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Setup checklist after import\n1. Create a **Header Auth** credential (type `httpHeaderAuth`) with header name `Authorization` and value `Bearer <SYNC_SERVICE_TOKEN>` — the SAME secret you set on the Cloudflare Worker as `SYNC_SERVICE_TOKEN` (see `worker/README.md` step 7 in the repo).\n2. Attach that credential to the **Webhook - Library Sync** node (Authentication = Header Auth) AND to every **HTTP Request** node below (Authentication = Predefined Credential Type -> Header Auth) so calls back into the Worker are accepted.\n3. Set the **WORKER_BASE_URL** environment variable in your n8n instance (Settings -> Environment Variables, or edit the four HTTP Request node URLs directly) to your deployed Worker's URL, e.g. `https://menu-matcher-api.<subdomain>.workers.dev`.\n4. Activate the workflow, then copy the **Production** webhook URL and paste it into the Menu Matcher app's Admin tab -> \"Library sync (n8n)\" card as `librarySyncWebhookUrl`.\n5. Test with a deliberate duplicate resend before pointing this at production data — resending the same image should come back `deduped:true` instead of creating a second library entry.\n6. The client already compresses every image to a target KB before queuing it (see `resizeToKB()` in index.html) — this workflow intentionally does NOT recompress; it only hashes, dedupes, and forwards bytes as-is.",
+        "height": 460,
+        "width": 460,
+        "color": 6
+      },
+      "id": "a1111111-1111-4111-8111-111111111101",
+      "name": "Sticky Note - Setup Checklist",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 40]
+    },
+    {
+      "parameters": {
+        "content": "### Payload contract (sent by index.html's \"Sync now\" button)\n```\nPOST { items: [\n  { clientId, itemName, action: 'approved'|'renamed'|'generated'|'uploaded',\n    sourceLibraryId: number|null, newFileName: string|null,\n    b64: string|null,   // present for 'generated'/'uploaded'\n    hash: string|null }  // client-computed SHA-256, cross-checked below\n] }\n```\nResponse: `{ ok: true, results: [{ clientId, ok, deduped?, id?, file?, error? }] }` — matched back to the client's queue entries by `clientId` (not array position, since order is not guaranteed to be preserved through the branches below).",
+        "height": 280,
+        "width": 460,
+        "color": 5
+      },
+      "id": "a1111111-1111-4111-8111-111111111102",
+      "name": "Sticky Note - Payload Contract",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [740, 40]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "menu-matcher-library-sync",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "a1111111-1111-4111-8111-111111111103",
+      "name": "Webhook - Library Sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 420],
+      "webhookId": "b2222222-2222-4222-8222-222222222201",
+      "credentials": {
+        "httpHeaderAuth": { "id": "1", "name": "Menu Matcher Sync Token" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Flatten { items: [...] } (or a single item posted directly) into one n8n item per queue entry,\n// each carrying its clientId through so the final response can be matched back by the client.\nconst body = $input.first().json.body || $input.first().json;\nconst list = Array.isArray(body.items) ? body.items : [body];\nconst out = [];\nfor (const it of list) {\n  const errors = [];\n  if (!it.itemName) errors.push('itemName required');\n  if (!it.action || !['approved','renamed','generated','uploaded'].includes(it.action)) errors.push('invalid action');\n  const needsAsset = it.action === 'generated' || it.action === 'uploaded';\n  if (needsAsset && !it.b64) errors.push('b64 required for generated/uploaded');\n  if (it.action === 'renamed' && !it.newFileName) errors.push('newFileName required for renamed');\n  out.push({ json: { ...it, _valid: errors.length === 0, _error: errors.join('; ') } });\n}\nreturn out;\n"
+      },
+      "id": "a1111111-1111-4111-8111-111111111104",
+      "name": "Validate & Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1111111-1111-4111-8111-111111111105",
+              "leftValue": "={{ $json._valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1111111-1111-4111-8111-111111111106",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [820, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1111111-1111-4111-8111-111111111107",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "^(generated|uploaded)$",
+              "operator": { "type": "string", "operation": "regex" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1111111-1111-4111-8111-111111111108",
+      "name": "Needs New Asset?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 340]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const crypto = require('crypto');\nconst buf = Buffer.from($json.b64, 'base64');\nconst hash = crypto.createHash('sha256').update(buf).digest('hex');\n// defense in depth: if the client also sent a hash, they must agree\nif ($json.hash && $json.hash.toLowerCase() !== hash) {\n  return { json: { ...$json, _valid: false, _error: 'hash mismatch between client and server' } };\n}\nreturn { json: { ...$json, hash } };\n"
+      },
+      "id": "a1111111-1111-4111-8111-111111111109",
+      "name": "Compute SHA-256",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WORKER_BASE_URL }}/api/hash-index",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1111111-1111-4111-8111-111111111110",
+      "name": "Fetch Hash Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 220],
+      "credentials": { "httpHeaderAuth": { "id": "1", "name": "Menu Matcher Sync Token" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Same exact-hash dedupe technique already proven by hand in the repo's _dedup_work/ folder\n// (existing_hashes.txt / new_true_dupes.tsv), just automated: look the incoming hash up in the\n// library's hash index (derived fresh from index.json by the Worker, never a second file to drift).\nconst hashIndex = $('Fetch Hash Index').first().json.hashes || {};\nconst hit = hashIndex[$json.hash];\nif (hit) {\n  return { json: { ...$json, deduped: true, existingId: hit.id, existingFile: hit.file } };\n}\nreturn { json: { ...$json, deduped: false } };\n"
+      },
+      "id": "a1111111-1111-4111-8111-111111111111",
+      "name": "Dedupe Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1111111-1111-4111-8111-111111111112",
+              "leftValue": "={{ $json.deduped }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1111111-1111-4111-8111-111111111113",
+      "name": "Already In Library?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2220, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1111111-1111-4111-8111-111111111114",
+              "leftValue": "={{ $binary ? $binary.data.fileSize : Buffer.from($json.b64,'base64').length }}",
+              "rightValue": 900000,
+              "operator": { "type": "number", "operation": "lte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1111111-1111-4111-8111-111111111115",
+      "name": "Size Guard (<=900KB)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2500, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/api/cloud-add",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { name: $json.itemName, b64: $json.b64, hash: $json.hash } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1111111-1111-4111-8111-111111111116",
+      "name": "Call Worker /api/cloud-add",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2780, 60],
+      "onError": "continueErrorOutput",
+      "credentials": { "httpHeaderAuth": { "id": "1", "name": "Menu Matcher Sync Token" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1111111-1111-4111-8111-111111111117",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "renamed",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1111111-1111-4111-8111-111111111118",
+      "name": "Action = Renamed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/api/cloud-rename",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { id: $json.sourceLibraryId, newName: $json.newFileName } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1111111-1111-4111-8111-111111111119",
+      "name": "Call Worker /api/cloud-rename",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 540],
+      "onError": "continueErrorOutput",
+      "credentials": { "httpHeaderAuth": { "id": "1", "name": "Menu Matcher Sync Token" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/api/match-feedback",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { itemName: $json.itemName, sourceLibraryId: $json.sourceLibraryId, action: $json.action } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1111111-1111-4111-8111-111111111120",
+      "name": "Call Worker /api/match-feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 680],
+      "onError": "continueErrorOutput",
+      "credentials": { "httpHeaderAuth": { "id": "1", "name": "Menu Matcher Sync Token" } }
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "a1111111-1111-4111-8111-111111111121",
+      "name": "Merge All Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3060, 420]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Normalize every branch (invalid / deduped / cloud-add success+error / rename success+error /\n// match-feedback success+error) into one { clientId, ok, ... } shape the client can match by id.\nconst d = $json;\nif (d._valid === false) return { json: { clientId: d.clientId, ok: false, error: d._error } };\nif (d.deduped === true) return { json: { clientId: d.clientId, ok: true, deduped: true, id: d.existingId, file: d.existingFile } };\nif (d.error) {\n  const msg = typeof d.error === 'string' ? d.error : (d.error.message || JSON.stringify(d.error));\n  return { json: { clientId: d.clientId, ok: false, error: String(msg) } };\n}\nif (d.id != null) return { json: { clientId: d.clientId, ok: true, id: d.id, file: d.file } };\nreturn { json: { clientId: d.clientId, ok: true } };\n"
+      },
+      "id": "a1111111-1111-4111-8111-111111111122",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3340, 420]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { ok: true, results: $input.all().map(i => i.json) } }];\n"
+      },
+      "id": "a1111111-1111-4111-8111-111111111123",
+      "name": "Collect Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3620, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "a1111111-1111-4111-8111-111111111124",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3900, 420]
+    }
+  ],
+  "connections": {
+    "Webhook - Library Sync": { "main": [[{ "node": "Validate & Normalize Payload", "type": "main", "index": 0 }]] },
+    "Validate & Normalize Payload": { "main": [[{ "node": "Is Valid?", "type": "main", "index": 0 }]] },
+    "Is Valid?": {
+      "main": [
+        [{ "node": "Needs New Asset?", "type": "main", "index": 0 }, { "node": "Action = Renamed?", "type": "main", "index": 0 }],
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Needs New Asset?": {
+      "main": [
+        [{ "node": "Compute SHA-256", "type": "main", "index": 0 }],
+        [{ "node": "Merge All Branches", "type": "main", "index": 4 }]
+      ]
+    },
+    "Compute SHA-256": { "main": [[{ "node": "Fetch Hash Index", "type": "main", "index": 0 }]] },
+    "Fetch Hash Index": { "main": [[{ "node": "Dedupe Check", "type": "main", "index": 0 }]] },
+    "Dedupe Check": { "main": [[{ "node": "Already In Library?", "type": "main", "index": 0 }]] },
+    "Already In Library?": {
+      "main": [
+        [{ "node": "Merge All Branches", "type": "main", "index": 0 }],
+        [{ "node": "Size Guard (<=900KB)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Size Guard (<=900KB)": {
+      "main": [
+        [{ "node": "Call Worker /api/cloud-add", "type": "main", "index": 0 }],
+        [{ "node": "Merge All Branches", "type": "main", "index": 1 }]
+      ]
+    },
+    "Call Worker /api/cloud-add": {
+      "main": [
+        [{ "node": "Merge All Branches", "type": "main", "index": 2 }],
+        [{ "node": "Merge All Branches", "type": "main", "index": 2 }]
+      ]
+    },
+    "Action = Renamed?": {
+      "main": [
+        [{ "node": "Call Worker /api/cloud-rename", "type": "main", "index": 0 }],
+        [{ "node": "Call Worker /api/match-feedback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Worker /api/cloud-rename": {
+      "main": [
+        [{ "node": "Merge All Branches", "type": "main", "index": 3 }],
+        [{ "node": "Merge All Branches", "type": "main", "index": 3 }]
+      ]
+    },
+    "Call Worker /api/match-feedback": {
+      "main": [
+        [{ "node": "Merge All Branches", "type": "main", "index": 5 }],
+        [{ "node": "Merge All Branches", "type": "main", "index": 5 }]
+      ]
+    },
+    "Merge All Branches": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Collect Results", "type": "main", "index": 0 }]] },
+    "Collect Results": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
