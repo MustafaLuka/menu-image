@@ -124,13 +124,13 @@ th{background:var(--bg2);font-weight:600}
 <div class="card">
 <h2>⚙️ إعدادات n8n</h2>
 <label>🧠 Claude Smart Matching Webhook</label>
-<input type="text" id="webhookClaudeMatch" placeholder="https://...webhook/menu-matcher-match-item" style="margin-bottom:12px">
+<input type="text" id="webhookClaudeMatch" placeholder="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-match-item" value="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-match-item" style="margin-bottom:12px">
 <label>🤖 Smart Suggestions Webhook</label>
-<input type="text" id="webhookSuggestions" placeholder="https://...webhook/menu-matcher-smart-suggestions" style="margin-bottom:12px">
+<input type="text" id="webhookSuggestions" placeholder="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-smart-suggestions" value="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-smart-suggestions" style="margin-bottom:12px">
 <label>🔄 Library Sync Webhook</label>
-<input type="text" id="webhookLibSync" placeholder="https://...webhook/menu-matcher-library-sync" style="margin-bottom:12px">
-<label>✉️ Email Delivery Webhook</label>
-<input type="text" id="webhookEmail" placeholder="https://...webhook/menu-matcher-email-deliver" style="margin-bottom:12px">
+<input type="text" id="webhookLibSync" placeholder="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-library-sync" value="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-library-sync" style="margin-bottom:12px">
+<label>📤 Image Generation Webhook</label>
+<input type="text" id="webhookEmail" placeholder="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-gen-image" value="https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-gen-image" style="margin-bottom:12px">
 <button onclick="saveWebhooks()">💾 حفظ الإعدادات</button>
 <div id="adminResult" style="margin-top:16px"></div>
 </div>
@@ -140,13 +140,37 @@ th{background:var(--bg2);font-weight:600}
 
 <script>
 const API = {
-  parse: 'http://localhost:3001/api/parse',
-  match: 'http://localhost:3001/api/match',
-  generate: 'http://localhost:3001/api/generate',
-  export: 'http://localhost:3001/api/export'
+  parse: '/api/menu/parse',
+  match: '/api/menu/match',
+  generate: '/api/menu/generate',
+  export: '/api/menu/export'
 };
 
 let menuData = { items: [], matched: {} };
+
+// Load webhook settings on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const webhookClaudeMatch = localStorage.getItem('webhookClaudeMatch') || 'https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-match-item';
+  const webhookSuggestions = localStorage.getItem('webhookSuggestions') || 'https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-smart-suggestions';
+  const webhookLibSync = localStorage.getItem('webhookLibSync') || 'https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-library-sync';
+  const webhookEmail = localStorage.getItem('webhookEmail') || 'https://mono-mcp-server.dhhmena.com/n8n/webhook/menu-matcher-gen-image';
+
+  document.getElementById('webhookClaudeMatch').value = webhookClaudeMatch;
+  document.getElementById('webhookSuggestions').value = webhookSuggestions;
+  document.getElementById('webhookLibSync').value = webhookLibSync;
+  document.getElementById('webhookEmail').value = webhookEmail;
+
+  // Set up nav buttons
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const panelId = e.target.dataset.panel;
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(panelId).classList.add('active');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+    });
+  });
+});
 
 const ui = {
   show: (panelId) => {
