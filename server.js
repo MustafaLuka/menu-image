@@ -14,9 +14,13 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Library (in-memory, replace with DB)
 const library = {
-  'فلافل': [{ id: 'falafel-1', name: 'فلافل', url: 'data:image/svg+xml,...', lang: 'ar' }],
-  'شاورما': [{ id: 'shawarma-1', name: 'شاورما دجاج', url: 'data:image/svg+xml,...', lang: 'ar' }],
-  'burger': [{ id: 'burger-1', name: 'Burger', url: 'data:image/svg+xml,...', lang: 'en' }]
+  'falafel': [{ id: 'falafel-1', name: 'Falafel', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }],
+  'shawarma': [{ id: 'shawarma-1', name: 'Shawarma', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }],
+  'salad': [{ id: 'salad-1', name: 'Greek Salad', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }],
+  'chicken': [{ id: 'chicken-1', name: 'Grilled Chicken', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }],
+  'baklava': [{ id: 'baklava-1', name: 'Baklava', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }],
+  'burger': [{ id: 'burger-1', name: 'Burger', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }],
+  'pizza': [{ id: 'pizza-1', name: 'Pizza', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }]
 };
 
 // Parse Excel/CSV
@@ -90,8 +94,14 @@ app.post('/api/match', async (req, res) => {
       const item = items[i];
       let best = null, bestScore = 0;
 
-      // Try fuzzy match first
+      // Try fuzzy match first against all library items
       for (const [key, candidates] of Object.entries(library)) {
+        const keyScore = fuzzyMatch(item.name, key);
+        if (keyScore > bestScore) {
+          bestScore = keyScore;
+          best = candidates[0];
+        }
+
         for (const candidate of candidates) {
           const score = fuzzyMatch(item.name, candidate.name);
           if (score > bestScore) {
@@ -101,10 +111,11 @@ app.post('/api/match', async (req, res) => {
         }
       }
 
-      if (bestScore > 0.7) {
+      // If fuzzy match is good, use it
+      if (bestScore > 0.6 && best) {
         matched[i] = best.url;
-      } else if (webhook || ANTHROPIC_KEY) {
-        // Try Claude API directly for better matching
+      } else if (ANTHROPIC_KEY) {
+        // Try Claude API for ambiguous matches
         try {
           const candidates = Object.values(library).flat().map(c => c.name).join(', ');
           const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -116,22 +127,24 @@ app.post('/api/match', async (req, res) => {
             },
             body: JSON.stringify({
               model: 'claude-opus-5',
-              max_tokens: 150,
+              max_tokens: 50,
               messages: [{
                 role: 'user',
-                content: `Which menu item from this list best matches "${item.name}" (category: ${item.category})?\n\nCandidates: ${candidates}\n\nRespond with just the closest match name.`
+                content: `Best match for "${item.name}" from: ${candidates}. Reply with just the name.`
               }]
             })
           });
 
-          const claudeData = await claudeResponse.json();
-          if (claudeData.content && claudeData.content[0]) {
-            const selectedName = claudeData.content[0].text.trim();
-            const selected = Object.values(library).flat().find(c => c.name.includes(selectedName) || selectedName.includes(c.name));
-            if (selected) matched[i] = selected.url;
+          if (claudeResponse.ok) {
+            const claudeData = await claudeResponse.json();
+            if (claudeData.content && claudeData.content[0]) {
+              const selectedName = claudeData.content[0].text.trim().toLowerCase();
+              const selected = Object.values(library).flat().find(c => c.name.toLowerCase().includes(selectedName) || selectedName.includes(c.name.toLowerCase()));
+              if (selected) matched[i] = selected.url;
+            }
           }
         } catch (e) {
-          console.log('Claude matching failed:', e.message);
+          console.log('Claude API error:', e.message);
         }
       }
     }
