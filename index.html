@@ -15,11 +15,28 @@
     --green:#22b06b; --red:#ec4340; --soft:#1c222b; --ring:rgba(255,90,0,.35);
     --shadow:0 10px 30px rgba(0,0,0,.35); --shadow-sm:0 4px 14px rgba(0,0,0,.25);
     --radius-sm:10px; --radius:16px; --radius-lg:22px;
+    /* status-pill colors: pastel-on-dark by default, remapped to solid-on-light in light mode below */
+    --pill-green-bg:rgba(31,157,85,.18); --pill-green-tx:#5fdd97;
+    --pill-red-bg:rgba(224,50,47,.16); --pill-red-tx:#ff8a87;
+    --pill-blue-bg:rgba(64,128,255,.18); --pill-blue-tx:#86b0ff;
+    --pill-orange-bg:rgba(255,90,31,.18); --pill-orange-tx:#ffb38a;
+  }
+  /* Light mode: same layout/brand accent, background/cards flip to white, text flips to dark.
+     Dark mode (default) is intentionally left byte-for-byte identical to before this feature. */
+  html[data-theme="light"]{
+    --bg:#ffffff; --bg2:#f7f8fa; --card:#ffffff; --card2:#f4f5f7; --line:#e3e6ea;
+    --txt:#161a1f; --muted:#5b6470; --soft:#f0f2f5;
+    --shadow:0 10px 24px rgba(20,20,30,.08); --shadow-sm:0 3px 10px rgba(20,20,30,.06);
+    --pill-green-bg:rgba(31,157,85,.12); --pill-green-tx:#0f7a3d;
+    --pill-red-bg:rgba(224,50,47,.10); --pill-red-tx:#c62828;
+    --pill-blue-bg:rgba(64,128,255,.12); --pill-blue-tx:#1857b0;
+    --pill-orange-bg:rgba(255,90,31,.12); --pill-orange-tx:#b34700;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:Inter,-apple-system,"Segoe UI Variable","Segoe UI",Tahoma,Arial,sans-serif;
     background:radial-gradient(1200px 600px at 100% -10%,rgba(255,90,0,.08),transparent 60%),var(--bg);
-    color:var(--txt);line-height:1.6;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+    color:var(--txt);line-height:1.6;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;
+    transition:background-color .15s ease,color .15s ease;}
   /* ── sidebar layout ── */
   #appWrap{display:flex;flex:1;min-height:100vh;}
   #sidebar{width:220px;min-height:100vh;background:var(--card);border-inline-end:1px solid var(--line);
@@ -64,7 +81,7 @@
   .login-card .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
   .login-card .gbtn-wrap{display:flex;justify-content:center;min-height:44px}
   .login-note{font-size:12px;color:var(--muted);margin-top:16px;line-height:1.7}
-  .login-err{color:#ff9a97;font-size:13px;margin-top:12px;min-height:18px}
+  .login-err{color:var(--pill-red-tx);font-size:13px;margin-top:12px;min-height:18px}
   .login-cfg{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px;text-align:start}
   .login-cfg summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
   .wrap{max-width:1040px;margin:0 auto;padding:12px 20px 28px}
@@ -84,8 +101,8 @@
   .checks label.on{border-color:var(--accent);background:rgba(255,90,31,.12)}
   .checks input{width:auto;margin:0}
   .lang-badge{font-size:11px;padding:1px 7px;border-radius:20px;font-weight:700}
-  .lang-ar{background:rgba(31,157,85,.18);color:#5fdd97}
-  .lang-en{background:rgba(64,128,255,.18);color:#86b0ff}
+  .lang-ar{background:var(--pill-green-bg);color:var(--pill-green-tx)}
+  .lang-en{background:var(--pill-blue-bg);color:var(--pill-blue-tx)}
   .thumb{width:46px;height:46px;object-fit:cover;border-radius:6px;background:var(--soft);border:1px solid var(--line)}
   .thumb.clk{cursor:zoom-in}
   #impList .thumb{cursor:default}
@@ -106,8 +123,8 @@
   button.ghost{background:var(--soft);border:1px solid var(--line)}
   .hint{font-size:12.5px;color:var(--muted)}
   .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12.5px;font-weight:700}
-  .ok{background:rgba(31,157,85,.18);color:#5fdd97;border:1px solid rgba(31,157,85,.4)}
-  .no{background:rgba(224,50,47,.16);color:#ff8a87;border:1px solid rgba(224,50,47,.4)}
+  .ok{background:var(--pill-green-bg);color:var(--pill-green-tx);border:1px solid rgba(31,157,85,.4)}
+  .no{background:var(--pill-red-bg);color:var(--pill-red-tx);border:1px solid rgba(224,50,47,.4)}
   .stat{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}
   .stat .box{flex:1;min-width:130px;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:12px;text-align:center}
   .stat .box b{display:block;font-size:26px}
@@ -167,7 +184,7 @@
       <input type="email" id="emailLoginInput" placeholder="you@talabat.com">
     </div>
     <button id="loginSubmit" style="width:100%;margin-top:4px;">دخول ←</button>
-    <div id="loginErr" style="color:#ff9a97;font-size:13px;margin-top:10px;min-height:16px;"></div>
+    <div id="loginErr" style="color:var(--pill-red-tx);font-size:13px;margin-top:10px;min-height:16px;"></div>
   </div>
 </div>
 
@@ -187,9 +204,12 @@
       <button class="sb-item" data-panel="admin" style="display:none;"><span class="sb-icon">⚙️</span><span class="sb-lbl">الإدارة</span></button>
     </nav>
     <div class="sb-bottom">
-      <div class="langsw" id="langSw">
-        <button data-lang="ar">ع</button>
-        <button data-lang="en">EN</button>
+      <div style="display:flex;gap:8px">
+        <div class="langsw" id="langSw" style="flex:1">
+          <button data-lang="ar">ع</button>
+          <button data-lang="en">EN</button>
+        </div>
+        <button id="themeToggle" class="ghost" title="بدّل بين الوضع الداكن والفاتح" style="flex:0 0 auto;padding:0 12px;font-size:15px;box-shadow:none;border:1px solid var(--line)">🌙</button>
       </div>
       <div class="sb-user" id="sbUserLabel">—</div>
       <button id="logoutBtn" class="ghost" style="font-size:12px;padding:5px 10px;box-shadow:none;border:1px solid var(--line);">↩ خروج</button>
@@ -888,7 +908,12 @@ const I18N = {
   'اتبعت بنجاح.':'Sent successfully.',
   'فشل الإرسال: ':'Send failed: ',
   // library sync flagging (Phase 5)
-  'يحتاج مزامنة':'needs sync',
+  '🔄 يحتاج مزامنة':'🔄 needs sync',
+  '🔄 بدّل':'🔄 Swap',
+  'اضغط للتكبير':'Click to enlarge',
+  'اسحب صورة هنا أو دوس لتغييرها':'Drag an image here, or click to change it',
+  'اسحب صورة هنا أو دوس لإضافتها':'Drag an image here, or click to add one',
+  'بدّل بين الوضع الداكن والفاتح':'Toggle dark / light mode',
   'تحتاج مزامنة مع المكتبة':'Needs library sync',
   'مزامنة المكتبة (n8n)':'Library sync (n8n)',
   'أي صورة معتمدة/مسمّاة/مولّدة أثناء المطابقة بتتحط في قائمة انتظار. الزرار ده بيبعتها لـ n8n workflow عشان يزامنها مع المكتبة المركزية.':'Any image approved, renamed, or generated during matching is queued. This button sends the queue to an n8n workflow to sync it into the shared library.',
@@ -1224,6 +1249,17 @@ const I18N = {
   'اقتراح — راجعها ودوس «أضيفها».':'suggestion(s) — review and click "Add".',
 };
 let LANG = localStorage.getItem('lang') || 'ar';
+// ===================== dark / light theme =====================
+let THEME = localStorage.getItem('theme') || 'dark';
+function applyTheme(theme){
+  THEME = (theme==='light') ? 'light' : 'dark';
+  localStorage.setItem('theme', THEME);
+  if(THEME==='light') document.documentElement.setAttribute('data-theme','light');
+  else document.documentElement.removeAttribute('data-theme');
+  const btn=document.getElementById('themeToggle'); if(btn) btn.textContent = THEME==='light' ? '☀️' : '🌙';
+}
+document.getElementById('themeToggle').addEventListener('click', ()=>applyTheme(THEME==='light'?'dark':'light'));
+applyTheme(THEME);
 const _origText = new WeakMap();
 const _skipTags = {SCRIPT:1,STYLE:1,TEXTAREA:1,INPUT:1,SELECT:1,OPTION:1,NOSCRIPT:1};
 function _translateTextNodes(root){
@@ -1247,6 +1283,13 @@ function _translatePlaceholders(){
     el.setAttribute('placeholder', (LANG==='en'&&en!=null)?en:el.__ph);
   });
 }
+function _translateTitles(){
+  document.querySelectorAll('[title]').forEach(el=>{
+    if(!el.__title) el.__title=el.getAttribute('title');
+    const key=el.__title.trim(); const en=I18N[key];
+    el.setAttribute('title', (LANG==='en'&&en!=null)?el.__title.replace(key,en):el.__title);
+  });
+}
 function _translateOptions(){
   document.querySelectorAll('option').forEach(opt=>{
     if(!opt.__optOrig) opt.__optOrig=opt.textContent;
@@ -1260,6 +1303,7 @@ function applyLang(lang){
   document.documentElement.dir = LANG==='ar' ? 'rtl' : 'ltr';
   _translateTextNodes(document.body);
   _translatePlaceholders();
+  _translateTitles();
   _translateOptions();
   document.querySelectorAll('#langSw button').forEach(b=> b.classList.toggle('on', b.dataset.lang===LANG));
   // re-render dynamic content that bypasses text-node translation
@@ -2256,7 +2300,7 @@ function _handleResultImgError(imgEl, i){
   imgEl.src=imgUrl(cand);
   const trEl=imgEl.closest('tr');
   const el=trEl && trEl.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
-  const swBtn=trEl && trEl.querySelector('.swap'); if(swBtn) swBtn.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
+  const swBtn=trEl && trEl.querySelector('.swap'); if(swBtn) swBtn.innerHTML=`🔄 بدّل <span class="notranslate">(${row.chosenIdx+1}/${row.candidates.length})</span>`;
 }
 function extOf(n){ const m=String(n).match(/\.[^.]+$/); return m?m[0]:'.jpg'; }
 function escapeAttr(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
@@ -2283,9 +2327,9 @@ function renderResults(){
     const tr=document.createElement('tr'); tr.className=row.type==='found'?'found':'miss';
     if(row.type==='found'){
       const cand=row.candidates[row.chosenIdx]; const ext=extOf(cand.name); const n=row.candidates.length;
-      const badge=`<span class="pill ok">✔ موجودة</span>${row.fallback?' <span class="lang-badge lang-en">لغة تانية</span>':''}${row.reordered?' <span class="lang-badge lang-ar">ترتيب</span>':''}${row.suggested?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">مقترح</span>':''}${row.needsSync?' <span class="lang-badge sync-pill" style="background:rgba(255,90,0,.18);color:var(--accent)">🔄 يحتاج مزامنة</span>':''}`;
+      const badge=`<span class="pill ok">✔ موجودة</span>${row.fallback?' <span class="lang-badge lang-en">لغة تانية</span>':''}${row.reordered?' <span class="lang-badge lang-ar">ترتيب</span>':''}${row.suggested?' <span class="lang-badge" style="background:var(--pill-orange-bg);color:var(--pill-orange-tx)">مقترح</span>':''}${row.needsSync?' <span class="lang-badge sync-pill" style="background:rgba(255,90,0,.18);color:var(--accent)">🔄 يحتاج مزامنة</span>':''}`;
       const swap = n>1
-        ? `<button class="swap" data-i="${i}">🔄 بدّل (${row.chosenIdx+1}/${n})</button>`
+        ? `<button class="swap" data-i="${i}">🔄 بدّل <span class="notranslate">(${row.chosenIdx+1}/${n})</span></button>`
         : `<span class="muted" style="font-size:12px">الصورة الوحيدة</span>`;
       const removeBtn=`<button class="rmatch" data-i="${i}" title="احذف المطابقة — يرجع الصنف لـ ناقصة" style="background:transparent;border:1px solid rgba(236,67,64,.4);color:#ec4340;padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;margin-inline-start:4px">✕</button>`;
       tr.innerHTML=`
@@ -2333,13 +2377,13 @@ document.querySelectorAll('[data-pmode]').forEach(btn=>{
 $('resTbl').addEventListener('click', e=>{
   const sw=e.target.closest('.swap');
   if(sw){ const i=+sw.dataset.i, row=state.results[i]; row.chosenIdx=(row.chosenIdx+1)%row.candidates.length;
-    const cand=row.candidates[row.chosenIdx]; const tr=sw.closest('tr');
-    const tImg=tr.querySelector('img.thumb');
+    const cand=row.candidates[row.chosenIdx]; const trEl=sw.closest('tr');
+    const tImg=trEl.querySelector('img.thumb');
     tImg.style.opacity='0.35'; tImg.src=imgUrl(cand);
     tImg.onload=()=>{ tImg.style.opacity=''; tImg.style.outline='2px solid var(--accent)'; setTimeout(()=>{ tImg.style.outline=''; },700); };
     tImg.onerror=()=>{ tImg.style.opacity=''; };
-    const el=tr.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
-    sw.textContent=`🔄 بدّل (${row.chosenIdx+1}/${row.candidates.length})`;
+    const el=trEl.querySelector('.extlbl'); if(el) el.textContent=' '+extOf(cand.name);
+    sw.innerHTML=`🔄 بدّل <span class="notranslate">(${row.chosenIdx+1}/${row.candidates.length})</span>`;
     if(state.previewIdx===i) showPreview(i);
     return; }
   const rm=e.target.closest('.rmatch');
@@ -3360,7 +3404,7 @@ $('suggestBtn').addEventListener('click', async ()=>{
     }
     state.suggestBlocks=blocks.filter(b=>b.sugg.length); renderSuggestions();
     if(!(($('suggestProgress').textContent||'').startsWith('⚠️'))){
-      const note = gemNoKey ? ' <span style="color:#ffb38a">— ملحوظة: فعّلت ترشيح Gemini بس مفيش مفتاح؛ حُط مفتاح Gemini API فوق عشان يشتغل.</span>' : '';
+      const note = gemNoKey ? ' <span style="color:var(--pill-orange-tx)">— ملحوظة: فعّلت ترشيح Gemini بس مفيش مفتاح؛ حُط مفتاح Gemini API فوق عشان يشتغل.</span>' : '';
       $('suggestProgress').innerHTML = (state.suggestBlocks.length
         ? `✅ لقيت اقتراحات لـ <b>${state.suggestBlocks.length}</b> صنف من ${missing.length}${gemAvailable?' (راجعتهم كلهم بـ Gemini)':''}. راجعها ودوس «أضيفها» للي يناسبك.`
         : 'مفيش اقتراحات قريبة في المكتبة.') + note;
@@ -3385,9 +3429,9 @@ function _advanceSuggSlot(bi, si){
 }
 function _sugBadges(it){
   return {
-    fxb: it.fixed?' <span class="lang-badge" style="background:rgba(255,90,31,.18);color:#ffb38a">ثابتة</span>':'',
+    fxb: it.fixed?' <span class="lang-badge" style="background:var(--pill-orange-bg);color:var(--pill-orange-tx)">ثابتة</span>':'',
     olb: it.otherLang?' <span class="lang-badge lang-en">لغة تانية</span>':'',
-    aib: it.ai?' <span class="lang-badge" style="background:rgba(120,200,120,.18);color:#8fd08f">✨AI</span>':''
+    aib: it.ai?' <span class="lang-badge" style="background:var(--pill-green-bg);color:var(--pill-green-tx)">✨AI</span>':''
   };
 }
 // update a single suggestion slot in place (new image, or remove just that one thumbnail) — no full re-render,
