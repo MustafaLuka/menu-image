@@ -1,0 +1,370 @@
+{
+  "workflows": [
+    {
+      "name": "Claude Smart Matching",
+      "description": "Match ambiguous menu items using Claude - fast name matching with fallback for uncertain cases",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook_trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "menu-matcher-match-item",
+            "responseMode": "onReceived",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "id": "parse_input",
+          "type": "n8n-nodes-base.set",
+          "position": [450, 300],
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {"id": "a1", "name": "item_id", "type": "simple", "value": "={{$node.webhook_trigger.json.item_id}}"},
+                {"id": "a2", "name": "item_name", "type": "simple", "value": "={{$node.webhook_trigger.json.item_name}}"},
+                {"id": "a3", "name": "category", "type": "simple", "value": "={{$node.webhook_trigger.json.category}}"},
+                {"id": "a4", "name": "candidates", "type": "simple", "value": "={{$node.webhook_trigger.json.candidates}}"},
+                {"id": "a5", "name": "callback_url", "type": "simple", "value": "={{$node.webhook_trigger.json.callback_url}}"}
+              ]
+            }
+          }
+        },
+        {
+          "id": "claude_prompt",
+          "type": "n8n-nodes-base.set",
+          "position": [650, 300],
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {
+                  "id": "a1",
+                  "name": "prompt",
+                  "type": "simple",
+                  "value": "=You are a menu item matching expert. Given a menu item name and a list of candidate images from a library, choose the BEST matching image by name similarity. Consider:\n1. Exact name matches (highest priority)\n2. Substring matches\n3. Similar meanings (e.g., 'chicken wrap' matches 'chicken shawarma')\n4. Language variations (Arabic/English)\n\nMenu Item: {{$node.parse_input.json.item_name}}\nCategory: {{$node.parse_input.json.category}}\n\nCandidates:\n{{$node.parse_input.json.candidates.map((c, i) => `${i}. ${c.name} (${c.lang || 'unknown'})`).join('\\n')}}\n\nRespond with ONLY valid JSON: {\"selected_index\": <number>, \"confidence\": <0-1>, \"reason\": \"<brief reason>\"}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "call_claude",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "authentication": "genericCredentialType",
+            "genericAuthType": "bearerToken",
+            "nodeCredentialType": "httpBearerAuth",
+            "headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "bodyParametersUi": "json",
+            "body": "={\"model\":\"claude-opus-5\",\"max_tokens\":300,\"messages\":[{\"role\":\"user\",\"content\":\"{{$node.claude_prompt.json.prompt}}\"}]}"
+          }
+        },
+        {
+          "id": "parse_response",
+          "type": "n8n-nodes-base.code",
+          "position": [1050, 300],
+          "parameters": {
+            "language": "javaScript",
+            "code": "try {\n  const body = $input.first().json.body;\n  const text = body.content[0].text;\n  const json = JSON.parse(text);\n  return [{json: {selected_index: json.selected_index, confidence: json.confidence, reason: json.reason}}];\n} catch(e) {\n  return [{json: {error: 'Failed to parse Claude response', details: e.message}}];\n}"
+          }
+        },
+        {
+          "id": "check_confidence",
+          "type": "n8n-nodes-base.if",
+          "position": [1250, 300],
+          "parameters": {
+            "conditions": {\n              "options": [\n                {\"condition\": \"number\", \"value1\": \"={{$node.parse_response.json.confidence}}\", \"value2\": 0.7, \"operation\": \"gte\"}\n              ]\n            }\n          }
+        },
+        {
+          "id": "send_matched",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1450, 150],
+          "parameters": {
+            "url": "={{$node.parse_input.json.callback_url}}\",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"matched\",\"item_id\":\"{{$node.parse_input.json.item_id}}\",\"selected_image\":{{$node.parse_input.json.candidates[$node.parse_response.json.selected_index]}},\"confidence\":{{$node.parse_response.json.confidence}},\"matched_by\":\"claude_opus\"}"
+          }
+        },
+        {
+          "id": "send_review",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1450, 450],
+          "parameters": {
+            "url": "={{$node.parse_input.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"needs_review\",\"item_id\":\"{{$node.parse_input.json.item_id}}\",\"candidates\":{{$node.parse_input.json.candidates}},\"confidence\":{{$node.parse_response.json.confidence}},\"reason\":\"Low confidence - needs manual review\"}"
+          }
+        }
+      ],
+      "connections": {
+        "webhook_trigger": {"main": [[{"node": "parse_input", "type": "main"}]]},
+        "parse_input": {"main": [[{"node": "claude_prompt", "type": "main"}]]},
+        "claude_prompt": {"main": [[{"node": "call_claude", "type": "main"}]]},
+        "call_claude": {"main": [[{"node": "parse_response", "type": "main"}]]},
+        "parse_response": {"main": [[{"node": "check_confidence", "type": "main"}]]},
+        "check_confidence": {
+          "main": [[{"node": "send_matched", "type": "main"}], [{"node": "send_review", "type": "main"}]]
+        }
+      }
+    },
+    {
+      "name": "Smart Suggestions Ranker",
+      "description": "Re-rank image suggestions using Claude AI - free local re-ranking + optional Gemini visual verification",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook_trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "menu-matcher-smart-suggestions",
+            "responseMode": "onReceived",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "id": "parse_input",
+          "type": "n8n-nodes-base.set",
+          "position": [450, 300],
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {"id": "a1", "name": "item_id", "type": "simple", "value": "={{$node.webhook_trigger.json.item_id}}"},
+                {"id": "a2", "name": "item_name", "type": "simple", "value": "={{$node.webhook_trigger.json.item_name}}"},
+                {"id": "a3", "name": "category", "type": "simple", "value": "={{$node.webhook_trigger.json.category}}"},
+                {"id": "a4", "name": "description", "type": "simple", "value": "={{$node.webhook_trigger.json.description || 'N/A'}}"},
+                {"id": "a5", "name": "suggestions", "type": "simple", "value": "={{$node.webhook_trigger.json.suggestions}}"},
+                {"id": "a6", "name": "callback_url", "type": "simple", "value": "={{$node.webhook_trigger.json.callback_url}}"}
+              ]
+            }
+          }
+        },
+        {
+          "id": "rank_prompt",
+          "type": "n8n-nodes-base.set",
+          "position": [650, 300],
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {
+                  "id": "a1",
+                  "name": "prompt",
+                  "type": "simple",
+                  "value": "=You are a menu image expert. Score how well each image matches the menu item on a scale 0-100. Consider:\n1. Name match\n2. Category match\n3. Description match (if provided)\n4. Visual appropriateness\n\nMenu Item: {{$node.parse_input.json.item_name}}\nCategory: {{$node.parse_input.json.category}}\nDescription: {{$node.parse_input.json.description}}\n\nSuggested images:\n{{$node.parse_input.json.suggestions.map((s, i) => `${i}. ${s.name} (${s.language || 'unknown'})`).join('\\n')}}\n\nRespond with ONLY valid JSON: {\"scores\": [{\"index\": <num>, \"name\": \"<name>\", \"score\": <0-100>, \"reason\": \"<brief>\"}], \"top_recommendation\": <index>}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "call_claude",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "authentication": "genericCredentialType",
+            "genericAuthType": "bearerToken",
+            "nodeCredentialType": "httpBearerAuth",
+            "headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "bodyParametersUi": "json",
+            "body": "={\"model\":\"claude-opus-5\",\"max_tokens\":500,\"messages\":[{\"role\":\"user\",\"content\":\"{{$node.rank_prompt.json.prompt}}\"}]}"
+          }
+        },
+        {
+          "id": "parse_scores",
+          "type": "n8n-nodes-base.code",
+          "position": [1050, 300],
+          "parameters": {
+            "language": "javaScript",
+            "code": "try {\n  const body = $input.first().json.body;\n  const text = body.content[0].text;\n  const json = JSON.parse(text);\n  return [{json: {scores: json.scores, top_index: json.top_recommendation}}];\n} catch(e) {\n  return [{json: {error: 'Failed to parse ranking', scores: []}}];\n}"
+          }
+        },
+        {
+          "id": "send_result",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 300],
+          "parameters": {
+            "url": "={{$node.parse_input.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"suggestions_ranked\",\"item_id\":\"{{$node.parse_input.json.item_id}}\",\"ranked_suggestions\":{{$node.parse_scores.json.scores}},\"top_recommendation_index\":{{$node.parse_scores.json.top_index}},\"verification_method\":\"claude_ranking\"}"
+          }
+        }
+      ],
+      "connections": {
+        "webhook_trigger": {"main": [[{"node": "parse_input", "type": "main"}]]},
+        "parse_input": {"main": [[{"node": "rank_prompt", "type": "main"}]]},
+        "rank_prompt": {"main": [[{"node": "call_claude", "type": "main"}]]},
+        "call_claude": {"main": [[{"node": "parse_scores", "type": "main"}]]},
+        "parse_scores": {"main": [[{"node": "send_result", "type": "main"}]]}
+      }
+    },
+    {
+      "name": "Library Sync",
+      "description": "Sync approved and generated images to the cloud library - batch operation",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook_trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "menu-matcher-library-sync",
+            "responseMode": "onReceived",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "id": "parse_input",
+          "type": "n8n-nodes-base.set",
+          "position": [450, 300],
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {"id": "a1", "name": "sync_id", "type": "simple", "value": "={{$node.webhook_trigger.json.sync_id}}"},
+                {"id": "a2", "name": "images", "type": "simple", "value": "={{$node.webhook_trigger.json.images}}"},
+                {"id": "a3", "name": "operation", "type": "simple", "value": "={{$node.webhook_trigger.json.operation || 'add'}}"},
+                {"id": "a4", "name": "callback_url", "type": "simple", "value": "={{$node.webhook_trigger.json.callback_url}}"}
+              ]
+            }
+          }
+        },
+        {
+          "id": "sync_to_db",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [650, 300],
+          "parameters": {
+            "url": "https://your-library-api.com/api/sync",
+            "method": "POST",
+            "authentication": "genericCredentialType",
+            "genericAuthType": "bearerToken",
+            "nodeCredentialType": "httpBearerAuth",
+            "bodyParametersUi": "json",
+            "body": "={\"images\":{{$node.parse_input.json.images}},\"operation\":\"{{$node.parse_input.json.operation}}\",\"timestamp\":\"{{new Date().toISOString()}}\",\"source\":\"menu-matcher\"}"
+          }
+        },
+        {
+          "id": "check_success",
+          "type": "n8n-nodes-base.if",
+          "position": [850, 300],
+          "parameters": {
+            "conditions": {
+              "options": [
+                {"condition\": \"number\", \"value1\": \"={{$node.sync_to_db.json.status_code}}\", \"value2\": 200, \"operation\": \"gte\"},
+                {\"condition\": \"number\", \"value1\": \"={{$node.sync_to_db.json.status_code}}\", \"value2\": 300, \"operation\": \"lt\"}
+              ]
+            }
+          }
+        },
+        {
+          "id": "send_success",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 150],
+          "parameters": {
+            "url": "={{$node.parse_input.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"synced\",\"sync_id\":\"{{$node.parse_input.json.sync_id}}\",\"images_synced\":{{$node.parse_input.json.images.length}},\"timestamp\":\"{{new Date().toISOString()}}\"}"
+          }
+        },
+        {
+          "id": "send_error",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 450],
+          "parameters": {
+            "url": "={{$node.parse_input.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"sync_failed\",\"sync_id\":\"{{$node.parse_input.json.sync_id}}\",\"error\":\"Library sync failed\",\"timestamp\":\"{{new Date().toISOString()}}\"}"
+          }
+        }
+      ],
+      "connections": {
+        "webhook_trigger": {"main": [[{"node": "parse_input", "type": "main"}]]},
+        "parse_input": {"main": [[{"node": "sync_to_db", "type": "main"}]]},
+        "sync_to_db": {"main": [[{"node": "check_success", "type": "main"}]]},
+        "check_success": {
+          "main": [[{"node": "send_success", "type": "main"}], [{"node": "send_error", "type": "main"}]]
+        }
+      }
+    },
+    {
+      "name": "Image Generation via n8n",
+      "description": "Generate images for missing menu items using Gemini or GPT API",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook_trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "menu-matcher-gen-image",
+            "responseMode": "onReceived",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "id": "parse_input",
+          "type": "n8n-nodes-base.set",
+          "position": [450, 300],
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {"id": "a1", "name": "items", "type": "simple", "value": "={{$node.webhook_trigger.json.items}}"},
+                {"id": "a2", "name": "model", "type": "simple", "value": "={{$node.webhook_trigger.json.model || 'gemini-2.5-flash-image'}}"},
+                {"id": "a3", "name": "callback_url", "type": "simple", "value": "={{$node.webhook_trigger.json.callback_url}}"}
+              ]
+            }
+          }
+        },
+        {
+          "id": "generate_loop",
+          "type": "n8n-nodes-base.loop",
+          "position": [650, 300],
+          "parameters": {
+            "dataToLoop": "={{$node.parse_input.json.items}}"
+          }
+        },
+        {
+          "id": "call_gemini",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{$node.parse_input.json.model}}:generateContent?key={{$env.GEMINI_API_KEY}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"contents\":[{\"parts\":[{\"text\":\"Generate a professional food photo for a menu item: {{$node.generate_loop.json.name}} ({{$node.generate_loop.json.category}}). Make it appetizing, well-plated, and suitable for a restaurant menu.\"}]}],\"generationConfig\":{\"maxOutputTokens\":1024}}"
+          }
+        },
+        {
+          "id": "send_results",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 300],
+          "parameters": {
+            "url": "={{$node.parse_input.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"generated\",\"item\":{{$node.generate_loop.json}},\"image_response\":{{$node.call_gemini.json}},\"timestamp\":\"{{new Date().toISOString()}}\"}"
+          }
+        }
+      ],
+      "connections": {
+        "webhook_trigger": {"main": [[{"node": "parse_input", "type": "main"}]]},
+        "parse_input": {"main": [[{"node": "generate_loop", "type": "main"}]]},
+        "generate_loop": {"main": [[{"node": "call_gemini", "type": "main"}]]},
+        "call_gemini": {"main": [[{"node": "send_results", "type": "main"}]]}
+      }
+    }
+  ]
+}

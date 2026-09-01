@@ -1,0 +1,158 @@
+{
+  "workflows": [
+    {
+      "name": "Claude Smart Matching",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "menu-matcher-match-item",
+            "responseMode": "onReceived"
+          },
+          "position": [250, 300]
+        },
+        {
+          "id": "claude",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "headers": { "anthropic-version": "2023-06-01" },
+            "bodyParametersUi": "json",
+            "body": "={\"model\":\"claude-opus-5\",\"max_tokens\":200,\"messages\":[{\"role\":\"user\",\"content\":\"Menu item: {{$node.webhook.json.item_name}}\\nCategory: {{$node.webhook.json.category}}\\nPick best match from: {{$node.webhook.json.candidates.map(c=>c.name).join(', ')}}\\nRespond JSON: {selected_index: <number>, confidence: <0-1>}\"}]}"
+          },
+          "position": [450, 300]
+        },
+        {
+          "id": "callback",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "={{$node.webhook.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"matched\",\"item_id\":\"{{$node.webhook.json.item_id}}\",\"selected_image\":{{$node.webhook.json.candidates[$node.claude.json.body | parseJson().selected_index]}},\"confidence\":{{($node.claude.json.body | parseJson()).confidence}}}"
+          },
+          "position": [650, 300]
+        }
+      ],
+      "connections": {
+        "webhook": { "main": [[{ "node": "claude", "type": "main" }]] },
+        "claude": { "main": [[{ "node": "callback", "type": "main" }]] }
+      }
+    },
+    {
+      "name": "Smart Suggestions Ranker",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "menu-matcher-smart-suggestions",
+            "responseMode": "onReceived"
+          },
+          "position": [250, 300]
+        },
+        {
+          "id": "ranker",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "headers": { "anthropic-version": "2023-06-01" },
+            "bodyParametersUi": "json",
+            "body": "={\"model\":\"claude-opus-5\",\"max_tokens\":500,\"messages\":[{\"role\":\"user\",\"content\":\"Rank these images for '{{$node.webhook.json.item_name}}' ({{$node.webhook.json.category}}). Return JSON: {scores: [{index: <num>, name: <str>, score: <0-100>}], top: <index>}. Images: {{$node.webhook.json.suggestions.map((s,i)=>i+'. '+s.name).join(', ')}}\"}]}"
+          },
+          "position": [450, 300]
+        },
+        {
+          "id": "callback",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "={{$node.webhook.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"ranked\",\"item_id\":\"{{$node.webhook.json.item_id}}\",\"ranked\":{{($node.ranker.json.body | parseJson()).scores}},\"top_index\":{{($node.ranker.json.body | parseJson()).top}}}"
+          },
+          "position": [650, 300]
+        }
+      ],
+      "connections": {
+        "webhook": { "main": [[{ "node": "ranker", "type": "main" }]] },
+        "ranker": { "main": [[{ "node": "callback", "type": "main" }]] }
+      }
+    },
+    {
+      "name": "Library Sync",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "menu-matcher-library-sync",
+            "responseMode": "onReceived"
+          },
+          "position": [250, 300]
+        },
+        {
+          "id": "sync",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "http://localhost:3001/api/library-sync",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"images\":{{$node.webhook.json.images}},\"operation\":\"{{$node.webhook.json.operation}}\",\"timestamp\":\"{{now()}}\",\"source\":\"menu-matcher\"}"
+          },
+          "position": [450, 300]
+        },
+        {
+          "id": "result",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "={{$node.webhook.json.callback_url}}",
+            "method": "POST",
+            "bodyParametersUi": "json",
+            "body": "={\"status\":\"synced\",\"sync_id\":\"{{$node.webhook.json.sync_id}}\",\"count\":{{$node.webhook.json.images.length}}}"
+          },
+          "position": [650, 300]
+        }
+      ],
+      "connections": {
+        "webhook": { "main": [[{ "node": "sync", "type": "main" }]] },
+        "sync": { "main": [[{ "node": "result", "type": "main" }]] }
+      }
+    },
+    {
+      "name": "Email Delivery",
+      "active": true,
+      "nodes": [
+        {
+          "id": "webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "menu-matcher-email-deliver",
+            "responseMode": "onReceived"
+          },
+          "position": [250, 300]
+        },
+        {
+          "id": "email",
+          "type": "n8n-nodes-base.sendGrid",
+          "parameters": {
+            "toEmail": "={{$node.webhook.json.to}}",
+            "subject": "={{$node.webhook.json.subject}}",
+            "textOnly": false,
+            "htmlBody": "<h2>{{$node.webhook.json.subject}}</h2><p>{{$node.webhook.json.body}}</p><p>Files attached</p>"
+          },
+          "position": [450, 300]
+        }
+      ],
+      "connections": {
+        "webhook": { "main": [[{ "node": "email", "type": "main" }]] }
+      }
+    }
+  ]
+}
