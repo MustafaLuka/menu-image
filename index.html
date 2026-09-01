@@ -212,16 +212,14 @@ async function parseMenu() {
 }
 
 async function matchNow() {
-  const webhook = localStorage.getItem('webhookClaudeMatch');
-  if (!webhook) return alert('أضف webhook في الإدارة');
-
-  document.getElementById('matchResult').innerHTML = '<div class="result">⏳ جاري المطابقة...</div>';
+  document.getElementById('matchResult').innerHTML = '<div class="result">⏳ جاري المطابقة بـ Claude...</div>';
 
   try {
-    const res = await fetch(API.match, {
+    // Use direct Claude endpoint (workaround for deployment)
+    const res = await fetch('/api/menu/match-claude', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: menuData.items, webhook })
+      body: JSON.stringify({ items: menuData.items })
     });
     const results = await res.json();
     menuData.matched = results.matched;

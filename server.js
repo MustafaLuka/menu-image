@@ -173,6 +173,58 @@ app.post('/api/match', async (req, res) => {
   }
 });
 
+// Direct Claude matching (workaround for slow deployment)
+app.post('/api/menu/match-claude', async (req, res) => {
+  try {
+    const { items } = req.body;
+    const matched = {};
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || 'sk-IQvLbdYLZFl1Ph_FN_n9hg';
+
+    const candidates = Object.values(library).flat().map(c => c.name).join(', ');
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      try {
+        const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01',
+            'x-api-key': ANTHROPIC_KEY
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-5',
+            max_tokens: 30,
+            messages: [{
+              role: 'user',
+              content: `Best match for "${item.name}" (${item.category}) from: ${candidates}. Reply: just the name.`
+            }]
+          })
+        });
+
+        if (claudeResponse.ok) {
+          const claudeData = await claudeResponse.json();
+          if (claudeData.content && claudeData.content[0]) {
+            const selectedName = claudeData.content[0].text.trim().toLowerCase();
+            const selected = Object.values(library).flat().find(c =>
+              c.name.toLowerCase().includes(selectedName) ||
+              selectedName.includes(c.name.toLowerCase())
+            );
+            if (selected) matched[i] = selected.url;
+          }
+        }
+      } catch (e) {
+        console.log('Claude match error for item', i, ':', e.message);
+      }
+    }
+
+    res.json({ matched, count: Object.keys(matched).length });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // Match result callback from n8n
 app.post('/api/match-result', (req, res) => {
   const { item_id, selected_image, status } = req.body;
