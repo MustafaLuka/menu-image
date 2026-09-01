@@ -94,7 +94,7 @@ app.post('/api/match', async (req, res) => {
       const item = items[i];
       let best = null, bestScore = 0;
 
-      // Try fuzzy match first against all library items
+      // Strategy 1: Try fuzzy match against all library items
       for (const [key, candidates] of Object.entries(library)) {
         const keyScore = fuzzyMatch(item.name, key);
         if (keyScore > bestScore) {
@@ -111,11 +111,19 @@ app.post('/api/match', async (req, res) => {
         }
       }
 
-      // If fuzzy match is good, use it
-      if (bestScore > 0.6 && best) {
-        matched[i] = best.url;
-      } else if (ANTHROPIC_KEY) {
-        // Try Claude API for ambiguous matches
+      // Strategy 2: Check if item name contains library key (substring match)
+      if (bestScore < 0.5) {
+        for (const [key, candidates] of Object.entries(library)) {
+          if (item.name.toLowerCase().includes(key) || key.includes(item.name.toLowerCase().split(' ')[0])) {
+            bestScore = 0.8;
+            best = candidates[0];
+            break;
+          }
+        }
+      }
+
+      // Strategy 3: Use Claude for final matching
+      if (bestScore < 0.7 && ANTHROPIC_KEY) {
         try {
           const candidates = Object.values(library).flat().map(c => c.name).join(', ');
           const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -127,10 +135,10 @@ app.post('/api/match', async (req, res) => {
             },
             body: JSON.stringify({
               model: 'claude-opus-5',
-              max_tokens: 50,
+              max_tokens: 30,
               messages: [{
                 role: 'user',
-                content: `Best match for "${item.name}" from: ${candidates}. Reply with just the name.`
+                content: `Match "${item.name}" to: ${candidates}. Reply: just the name.`
               }]
             })
           });
@@ -139,13 +147,23 @@ app.post('/api/match', async (req, res) => {
             const claudeData = await claudeResponse.json();
             if (claudeData.content && claudeData.content[0]) {
               const selectedName = claudeData.content[0].text.trim().toLowerCase();
-              const selected = Object.values(library).flat().find(c => c.name.toLowerCase().includes(selectedName) || selectedName.includes(c.name.toLowerCase()));
-              if (selected) matched[i] = selected.url;
+              const selected = Object.values(library).flat().find(c =>
+                c.name.toLowerCase().includes(selectedName) || selectedName.includes(c.name.toLowerCase())
+              );
+              if (selected) {
+                best = selected;
+                bestScore = 0.9;
+              }
             }
           }
         } catch (e) {
           console.log('Claude API error:', e.message);
         }
+      }
+
+      // Accept match if score > 0.5
+      if (bestScore > 0.5 && best) {
+        matched[i] = best.url;
       }
     }
 
