@@ -59,6 +59,16 @@
   .sb-bottom{padding:12px 8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;}
   .sb-user{font-size:11.5px;color:var(--muted);padding:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   #mainContent{flex:1;overflow-y:auto;min-width:0;}
+  .wiz-steps{display:flex;align-items:center;gap:10px;padding:14px 20px 0;flex-wrap:wrap}
+  .wiz-step{display:flex;align-items:center;gap:8px;background:transparent;border:0;box-shadow:none;
+    color:var(--muted);font-size:13px;font-weight:700;padding:6px 4px;cursor:pointer}
+  .wiz-step .wiz-num{width:22px;height:22px;border-radius:50%;background:var(--soft);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px}
+  .wiz-step.done .wiz-num{background:var(--green);border-color:var(--green);color:#fff}
+  .wiz-step.active{color:var(--accent)}
+  .wiz-step.active .wiz-num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .wiz-arrow{color:var(--line);font-size:14px}
+  html[dir=ltr] .wiz-arrow{display:inline-block;transform:scaleX(-1)}
   .panel{display:none;}
   .panel.active{display:block;}
   .panel-hdr{padding:20px 20px 4px;}
@@ -218,6 +228,13 @@
 
   <!-- ══ Main Content ══ -->
   <div id="mainContent">
+    <div class="wiz-steps" id="wizSteps">
+      <button class="wiz-step" data-panel="upload"><span class="wiz-num">1</span><span data-i18n="رفع المنيو">رفع المنيو</span></button>
+      <span class="wiz-arrow">←</span>
+      <button class="wiz-step" data-panel="match"><span class="wiz-num">2</span><span data-i18n="مطابقة وتوليد">مطابقة وتوليد</span></button>
+      <span class="wiz-arrow">←</span>
+      <button class="wiz-step" data-panel="export"><span class="wiz-num">3</span><span data-i18n="تصدير">تصدير</span></button>
+    </div>
 
     <!-- ── Panel: Upload (wizard step 1) ── -->
     <div id="panel-upload" class="panel active">
@@ -878,10 +895,14 @@ document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('.sb-item[data-panel]').forEach(btn=>{
     btn.addEventListener('click',()=>switchPanel(btn.dataset.panel));
   });
+  document.querySelectorAll('.wiz-step[data-panel]').forEach(btn=>{
+    btn.addEventListener('click',()=>switchPanel(btn.dataset.panel));
+  });
 
   // language toggle is handled by the existing per-button listener at line ~772
 });
 
+const WIZ_ORDER=['upload','match','export'];
 function switchPanel(name){
   // Export is a wizard step that needs a match result to export — bounce back rather than show an empty page
   if(name==='export' && !(state.results && state.results.length)) name='match';
@@ -891,6 +912,13 @@ function switchPanel(name){
   document.querySelectorAll('.sb-item[data-panel]').forEach(btn=>{
     btn.classList.toggle('active', btn.dataset.panel===name);
   });
+  const idx=WIZ_ORDER.indexOf(name);
+  document.querySelectorAll('.wiz-step[data-panel]').forEach(btn=>{
+    const i=WIZ_ORDER.indexOf(btn.dataset.panel);
+    btn.classList.toggle('active', btn.dataset.panel===name);
+    btn.classList.toggle('done', idx>=0 && i>=0 && i<idx);
+  });
+  const wiz=document.getElementById('wizSteps'); if(wiz) wiz.style.display = (idx>=0) ? 'flex' : 'none';
 }
 
 // ===================== i18n: Arabic (default) + English toggle =====================
