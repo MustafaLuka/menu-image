@@ -1,0 +1,164 @@
+[
+  {
+    "name": "Claude Smart Matching",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "path": "menu-matcher-match-item",
+          "responseMode": "onReceived",
+          "httpMethod": "POST"
+        },
+        "id": "webhook_trigger",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [250, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://api.anthropic.com/v1/messages",
+          "method": "POST",
+          "headerParametersUi": "json",
+          "headers": {
+            "anthropic-version": "2023-06-01",
+            "x-api-key": "sk-IQvLbdYLZFl1Ph_FN_n9hg"
+          },
+          "bodyParametersUi": "json",
+          "body": "{\"model\": \"claude-opus-5\", \"max_tokens\": 200, \"messages\": [{\"role\": \"user\", \"content\": \"Menu item: {{$json.item_name}}\\nCategory: {{$json.category}}\\nCandidates: {{$json.candidates}}\\n\\nRespond with JSON only: {\\\"selected_index\\\": <num>, \\\"confidence\\\": <0-1>}\"}]}"
+        },
+        "id": "claude_api",
+        "name": "Call Claude Opus",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [500, 300]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{"node": "Call Claude Opus", "type": "main", "index": 0}]]
+      }
+    }
+  },
+  {
+    "name": "Smart Suggestions Ranker",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "path": "menu-matcher-smart-suggestions",
+          "responseMode": "onReceived",
+          "httpMethod": "POST"
+        },
+        "id": "webhook_trigger",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [250, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://api.anthropic.com/v1/messages",
+          "method": "POST",
+          "headerParametersUi": "json",
+          "headers": {
+            "anthropic-version": "2023-06-01",
+            "x-api-key": "sk-IQvLbdYLZFl1Ph_FN_n9hg"
+          },
+          "bodyParametersUi": "json",
+          "body": "{\"model\": \"claude-opus-5\", \"max_tokens\": 500, \"messages\": [{\"role\": \"user\", \"content\": \"Item: {{$json.item_name}}\\nImage candidates: {{$json.images}}\\n\\nRank by relevance 0-100. Respond JSON: {\\\"scores\\\": [{\\\"index\\\": 0, \\\"score\\\": 85}, {\\\"index\\\": 1, \\\"score\\\": 70}]}\"}]}"
+        },
+        "id": "ranker_api",
+        "name": "Rank Suggestions",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [500, 300]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{"node": "Rank Suggestions", "type": "main", "index": 0}]]
+      }
+    }
+  },
+  {
+    "name": "Library Sync",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "path": "menu-matcher-library-sync",
+          "responseMode": "onReceived",
+          "httpMethod": "POST"
+        },
+        "id": "webhook_trigger",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [250, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://api.example.com/sync",
+          "method": "POST",
+          "headerParametersUi": "json",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "bodyParametersUi": "json",
+          "body": "{\"items\": {{$json.items}}, \"timestamp\": {{$json.timestamp}}}"
+        },
+        "id": "sync_api",
+        "name": "Sync to Library",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [500, 300]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{"node": "Sync to Library", "type": "main", "index": 0}]]
+      }
+    }
+  },
+  {
+    "name": "Image Generation",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "path": "menu-matcher-gen-image",
+          "responseMode": "onReceived",
+          "httpMethod": "POST"
+        },
+        "id": "webhook_trigger",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [250, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "method": "POST",
+          "headerParametersUi": "json",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "bodyParametersUi": "json",
+          "body": "{\"contents\": [{\"parts\": [{\"text\": \"Create professional food image for {{$json.item_name}} in category {{$json.category}}\"}]}]}"
+        },
+        "id": "gemini_api",
+        "name": "Generate Image",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [500, 300]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{"node": "Generate Image", "type": "main", "index": 0}]]
+      }
+    }
+  }
+]
