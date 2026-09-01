@@ -79,16 +79,18 @@ function fuzzyMatch(needle, haystack) {
   return damerau(needle, haystack);
 }
 
-// Smart match
+// Smart match with Claude integration
 app.post('/api/match', async (req, res) => {
   try {
     const { items, webhook } = req.body;
     const matched = {};
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || 'sk-IQvLbdYLZFl1Ph_FN_n9hg';
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       let best = null, bestScore = 0;
 
+      // Try fuzzy match first
       for (const [key, candidates] of Object.entries(library)) {
         for (const candidate of candidates) {
           const score = fuzzyMatch(item.name, candidate.name);
@@ -101,22 +103,35 @@ app.post('/api/match', async (req, res) => {
 
       if (bestScore > 0.7) {
         matched[i] = best.url;
-      } else if (webhook) {
-        // Send to Claude for intelligent matching
+      } else if (webhook || ANTHROPIC_KEY) {
+        // Try Claude API directly for better matching
         try {
-          await fetch(webhook, {
+          const candidates = Object.values(library).flat().map(c => c.name).join(', ');
+          const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'anthropic-version': '2023-06-01',
+              'x-api-key': ANTHROPIC_KEY
+            },
             body: JSON.stringify({
-              item_id: i,
-              item_name: item.name,
-              category: item.category,
-              candidates: Object.values(library).flat(),
-              callback_url: `${process.env.API_URL || 'http://localhost:3001'}/api/match-result`
+              model: 'claude-opus-5',
+              max_tokens: 150,
+              messages: [{
+                role: 'user',
+                content: `Which menu item from this list best matches "${item.name}" (category: ${item.category})?\n\nCandidates: ${candidates}\n\nRespond with just the closest match name.`
+              }]
             })
           });
+
+          const claudeData = await claudeResponse.json();
+          if (claudeData.content && claudeData.content[0]) {
+            const selectedName = claudeData.content[0].text.trim();
+            const selected = Object.values(library).flat().find(c => c.name.includes(selectedName) || selectedName.includes(c.name));
+            if (selected) matched[i] = selected.url;
+          }
         } catch (e) {
-          console.log('Claude webhook failed:', e);
+          console.log('Claude matching failed:', e.message);
         }
       }
     }
