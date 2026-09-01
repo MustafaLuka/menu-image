@@ -1,0 +1,142 @@
+{
+  "n8n": {
+    "api_base": "https://mono-mcp-server.dhhmena.com/api",
+    "auth": {
+      "project_id": "3SGU8EYe7UAl3gUn",
+      "api_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMzFmN2UxMC1jNWY3LTQ0MTEtOTA0Ny1iNjAzNDkwZDFiNTkiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzg2MjkwMTg2fQ.BaTxc5SKV6WuHd94AAHEv0PjHi4PKWpdVe9G7asZrIg"
+    }
+  },
+  "credentials": {
+    "anthropic": {
+      "type": "httpBearerAuth",
+      "name": "Anthropic API",
+      "api_key": "sk-IQvLbdYLZFl1Ph_FN_n9hg"
+    }
+  },
+  "webhooks": {
+    "claude_smart_matching": "menu-matcher-match-item",
+    "smart_suggestions": "menu-matcher-smart-suggestions",
+    "library_sync": "menu-matcher-library-sync",
+    "image_generation": "menu-matcher-gen-image"
+  },
+  "workflows": [
+    {
+      "id": "claude-smart-matching",
+      "name": "Claude Smart Matching",
+      "description": "Match ambiguous menu items using Claude Opus",
+      "trigger": "webhook",
+      "webhook_path": "menu-matcher-match-item",
+      "nodes": [
+        {
+          "type": "webhook",
+          "name": "webhook_trigger",
+          "config": {
+            "method": "POST",
+            "path": "menu-matcher-match-item"
+          }
+        },
+        {
+          "type": "http",
+          "name": "claude_request",
+          "config": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "headers": {
+              "anthropic-version": "2023-06-01",
+              "x-api-key": "sk-IQvLbdYLZFl1Ph_FN_n9hg"
+            },
+            "body": "json"
+          }
+        },
+        {
+          "type": "http",
+          "name": "callback",
+          "config": {
+            "method": "POST",
+            "url_from_input": "callback_url",
+            "body": "json"
+          }
+        }
+      ]
+    },
+    {
+      "id": "smart-suggestions",
+      "name": "Smart Suggestions Ranker",
+      "description": "Re-rank suggestions using Claude AI",
+      "trigger": "webhook",
+      "webhook_path": "menu-matcher-smart-suggestions",
+      "nodes": [
+        {
+          "type": "webhook",
+          "name": "webhook_trigger",
+          "config": {
+            "method": "POST",
+            "path": "menu-matcher-smart-suggestions"
+          }
+        },
+        {
+          "type": "http",
+          "name": "claude_ranker",
+          "config": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "headers": {
+              "anthropic-version": "2023-06-01",
+              "x-api-key": "sk-IQvLbdYLZFl1Ph_FN_n9hg"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "library-sync",
+      "name": "Library Sync",
+      "description": "Sync approved images to cloud library",
+      "trigger": "webhook",
+      "webhook_path": "menu-matcher-library-sync",
+      "nodes": [
+        {
+          "type": "webhook",
+          "name": "webhook_trigger",
+          "config": {
+            "method": "POST",
+            "path": "menu-matcher-library-sync"
+          }
+        },
+        {
+          "type": "http",
+          "name": "sync_api",
+          "config": {
+            "url": "https://your-library-api.com/api/sync",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "id": "image-generation",
+      "name": "Image Generation",
+      "description": "Generate images via Gemini API",
+      "trigger": "webhook",
+      "webhook_path": "menu-matcher-gen-image",
+      "nodes": [
+        {
+          "type": "webhook",
+          "name": "webhook_trigger",
+          "config": {
+            "method": "POST",
+            "path": "menu-matcher-gen-image"
+          }
+        },
+        {
+          "type": "http",
+          "name": "gemini_generate",
+          "config": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+            "method": "POST"
+          }
+        }
+      ]
+    }
+  ]
+}
