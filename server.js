@@ -10,6 +10,7 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static('.'));
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Library (in-memory, replace with DB)
@@ -24,7 +25,7 @@ const library = {
 };
 
 // Parse Excel/CSV
-app.post('/api/parse', upload.single('file'), (req, res) => {
+app.post('/api/menu/parse', upload.single('file'), (req, res) => {
   try {
     let items = [];
     const headerRow = parseInt(req.body.headerRow || 1) - 1;
@@ -84,7 +85,7 @@ function fuzzyMatch(needle, haystack) {
 }
 
 // Smart match with Claude integration
-app.post('/api/match', async (req, res) => {
+app.post('/api/menu/match', async (req, res) => {
   try {
     const { items, webhook } = req.body;
     const matched = {};
@@ -236,7 +237,7 @@ app.post('/api/match-result', (req, res) => {
 });
 
 // AI image generation
-app.post('/api/generate', async (req, res) => {
+app.post('/api/menu/generate', async (req, res) => {
   try {
     const { items } = req.body;
     const generated = [];
@@ -254,7 +255,7 @@ app.post('/api/generate', async (req, res) => {
 });
 
 // Export to ZIP
-app.post('/api/export', async (req, res) => {
+app.post('/api/menu/export', async (req, res) => {
   try {
     const { items, matched } = req.body;
     const zip = new JSZip();
