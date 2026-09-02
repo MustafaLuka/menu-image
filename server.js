@@ -24,6 +24,17 @@ const library = {
   'pizza': [{ id: 'pizza-1', name: 'Pizza', url: 'data:image/svg+xml,%3Csvg%3E%3Crect fill=%22%23FF5A00%22/%3E%3C/svg%3E', lang: 'en' }]
 };
 
+// Simple access code authentication
+const ACCESS_CODE = process.env.ACCESS_CODE || 'talabat2024';
+app.post('/auth/verify', (req, res) => {
+  const { code } = req.body;
+  if (code === ACCESS_CODE) {
+    res.json({ success: true, token: Buffer.from(code).toString('base64') });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid access code' });
+  }
+});
+
 // Parse Excel/CSV
 app.post('/api/menu/parse', upload.single('file'), (req, res) => {
   try {
